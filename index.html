@@ -96,8 +96,15 @@
     /* ── Spieler-Grid ── */
     .pbadge.locked { opacity: .35; text-decoration: line-through; }
 
+    /* ── Spotify Blur ── */
+    #spotify-art, #spotify-track, #spotify-artist { transition: filter .55s ease; }
+    #spotify-now.sp-hidden #spotify-art    { filter: blur(22px); }
+    #spotify-now.sp-hidden #spotify-track  { filter: blur(9px);  }
+    #spotify-now.sp-hidden #spotify-artist { filter: blur(7px);  }
+    #sp-blur-hint { text-align:center; font-size:.74rem; color:var(--muted); padding: 4px 0 0; display:none; }
+
     /* ── Gerätewähler ── */
-    #device-section { margin: 8px 0 4px; }
+    #device-section { margin: 0; }
     #device-list { display: flex; flex-direction: column; gap: 4px; }
     .device-item { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 1.5px solid transparent; font-size: .88rem; transition: background .12s, border-color .12s; }
     .device-item:hover { background: var(--border); }
@@ -151,13 +158,6 @@
       <div class="dot" id="sp-dot"></div>
       <span id="sp-label">Nicht eingeloggt</span>
     </div>
-    <div id="device-section" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 5px">
-        <span style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Abspielgerät</span>
-        <button class="btn-outline" style="padding:3px 10px;font-size:.78rem" onclick="loadDevices()">↻ aktualisieren</button>
-      </div>
-      <div id="device-list"></div>
-    </div>
     <div id="spotify-now" style="display:none">
       <img id="spotify-art" src="" alt="" />
       <div id="spotify-info">
@@ -169,22 +169,10 @@
         <div class="time-row"><span id="t-cur">0:00</span><span id="t-dur">0:00</span></div>
       </div>
     </div>
-    <div class="btn-row">
+    <div id="sp-blur-hint">🔒 Titel verborgen – wird nach richtigem Buzzer aufgedeckt</div>
+    <div class="btn-row" style="margin-top:10px">
       <button class="btn-spotify" id="btn-sp-login"  onclick="spotifyLogin()">🎵 Mit Spotify einloggen</button>
       <button class="btn-outline" id="btn-sp-logout" onclick="spotifyLogout()" style="display:none">Ausloggen</button>
-    </div>
-  </div>
-
-  <!-- ── BLE ── -->
-  <div class="card">
-    <div class="card-title">BuzzQuiz Board</div>
-    <div class="status-row">
-      <div class="dot" id="ble-dot"></div>
-      <span id="ble-label">Nicht verbunden</span>
-    </div>
-    <div class="btn-row">
-      <button class="btn-blue"    id="btn-ble-on"  onclick="bleConnect()">🔵 Verbinden</button>
-      <button class="btn-outline" id="btn-ble-off" onclick="bleDisconnect()" disabled>Trennen</button>
     </div>
   </div>
 
@@ -215,14 +203,24 @@
     </div>
   </div>
 
-  <!-- ── Bibliothek ── -->
+  <!-- ── Verbindungen (BLE + Spotify-Gerät) ── -->
   <div class="card">
-    <div class="card-title">Spotify Bibliothek</div>
-    <div id="lib-search-row">
-      <input id="lib-search" type="search" placeholder="Song suchen…" oninput="onLibSearch(this.value)" />
-      <button class="btn-spotify" onclick="loadLikedSongs()">♥ Liked</button>
+    <div class="card-title">BuzzQuiz Board</div>
+    <div class="status-row">
+      <div class="dot" id="ble-dot"></div>
+      <span id="ble-label">Nicht verbunden</span>
     </div>
-    <div id="track-list"><span style="color:var(--muted);font-size:.82rem">Songs laden oder suchen…</span></div>
+    <div class="btn-row">
+      <button class="btn-blue"    id="btn-ble-on"  onclick="bleConnect()">🔵 Verbinden</button>
+      <button class="btn-outline" id="btn-ble-off" onclick="bleDisconnect()" disabled>Trennen</button>
+    </div>
+    <div id="device-section" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 6px">
+        <span class="card-title" style="margin:0">Abspielgerät</span>
+        <button class="btn-outline" style="padding:3px 10px;font-size:.78rem" onclick="loadDevices()">↻</button>
+      </div>
+      <div id="device-list"></div>
+    </div>
   </div>
 
   <!-- ── Log ── -->
@@ -628,6 +626,7 @@ async function startRound() {
   lockedPlayers.clear();
   resetBadges();
   updateRound();
+  setSpotifyBlur(true);
   await spotifyNext();
   sendByte(0x53); // 'S'
   log(`→ START Runde ${currentRound}`, 'g');
@@ -639,6 +638,7 @@ function resetRound() {
   lockedPlayers.clear();
   updateRound();
   resetBadges();
+  setSpotifyBlur(false);
   log(`→ RESET → Runde ${currentRound}`);
 }
 
@@ -671,6 +671,8 @@ async function handleBuzz(player, round) {
 
 async function onRichtig() {
   document.getElementById('buzz-overlay').classList.remove('show');
+  // Titel aufdecken
+  setSpotifyBlur(false);
   // Punkt gutschreiben
   if (currentBuzzPlayer >= 1 && currentBuzzPlayer <= 4) {
     scores[currentBuzzPlayer]++;
@@ -678,8 +680,7 @@ async function onRichtig() {
   }
   // Song weiterlaufen lassen
   await resumeSpotify();
-  // Naechste Runde
-  resetRound();
+  // Badges aktualisieren (Runde noch nicht wechseln – Moderator sieht Ergebnis)
   updateScoreBadges();
 }
 
@@ -738,6 +739,14 @@ function updateScoreBadges() {
 }
 
 // ══════════════════════════════════════════════
+//  SPOTIFY – TITEL-BLUR
+// ══════════════════════════════════════════════
+function setSpotifyBlur(on) {
+  document.getElementById('spotify-now')?.classList.toggle('sp-hidden', on);
+  document.getElementById('sp-blur-hint').style.display = on ? 'block' : 'none';
+}
+
+// ══════════════════════════════════════════════
 //  VIRTUELLE BUZZER (DEV)
 // ══════════════════════════════════════════════
 function virtualBuzz(player) {
@@ -748,29 +757,7 @@ function virtualBuzz(player) {
 // ══════════════════════════════════════════════
 //  BIBLIOTHEK
 // ══════════════════════════════════════════════
-let libSearchTimer = null;
 let currentTrackList = [];
-
-function onLibSearch(val) {
-  clearTimeout(libSearchTimer);
-  if (val.trim().length < 2) return;
-  libSearchTimer = setTimeout(() => searchTracks(val.trim()), 400);
-}
-
-async function loadLikedSongs() {
-  document.getElementById('track-list').innerHTML =
-    '<span style="color:var(--muted);font-size:.82rem">Lade…</span>';
-  const data = await spotifyCall('GET', '/me/tracks?limit=50&market=DE');
-  if (!data || !data.items) { log('Liked Songs nicht geladen', 'y'); return; }
-  renderTracks(data.items.map(i => i.track));
-}
-
-async function searchTracks(q) {
-  const data = await spotifyCall('GET',
-    `/search?q=${encodeURIComponent(q)}&type=track&limit=30&market=DE`);
-  if (!data || !data.tracks) { log('Suche fehlgeschlagen', 'y'); return; }
-  renderTracks(data.tracks.items);
-}
 
 function esc(s) {
   return String(s)
@@ -827,10 +814,14 @@ function updateSpotifyUI(loggedIn) {
   document.getElementById('sp-label').textContent    = loggedIn ? 'Eingeloggt' : 'Nicht eingeloggt';
   document.getElementById('btn-sp-login').style.display  = loggedIn ? 'none'  : '';
   document.getElementById('btn-sp-logout').style.display = loggedIn ? ''      : 'none';
+  // Spielsteuerung freischalten sobald Spotify bereit
+  document.getElementById('btn-start').disabled = !loggedIn;
+  document.getElementById('btn-reset').disabled = !loggedIn;
   if (loggedIn) loadDevices();
   else {
     selectedDeviceId = null;
     document.getElementById('device-section').style.display = 'none';
+    setSpotifyBlur(false);
   }
 }
 
