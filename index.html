@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Song Quiz</title>
+  <style>
+    /* ── Reset & Basis ──────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d0d0d;
+      --surface:  #1a1a1a;
+      --border:   #2e2e2e;
+      --text:     #f0f0f0;
+      --muted:    #888;
+      --yellow:   #ffe000;
+      --green:    #00e050;
+      --red:      #ff3030;
+      --blue:     #40a0ff;
+
+      /* Spieler-Farben (Index 1–4) */
+      --p1: #40a0ff;
+      --p2: #00e050;
+      --p3: #ff3030;
+      --p4: #ffe000;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    /* ── Layout ─────────────────────────────────────────────── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      padding: 16px;
+      gap: 12px;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--yellow);
+      letter-spacing: 0.08em;
+    }
+
+    /* ── Karten ─────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+
+    .card-title {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    /* ── Buttons ─────────────────────────────────────────────── */
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button:active { opacity: .75; transform: scale(.97); }
+    button:disabled { opacity: .35; cursor: not-allowed; }
+
+    .btn-primary  { background: var(--yellow); color: #000; }
+    .btn-green    { background: var(--green);  color: #000; }
+    .btn-red      { background: var(--red);    color: #fff; }
+    .btn-blue     { background: var(--blue);   color: #000; }
+    .btn-outline  {
+      background: transparent;
+      border: 1.5px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+    }
+    .btn-row button { flex: 1; }
+
+    /* ── BLE Status ──────────────────────────────────────────── */
+    #ble-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: .9rem;
+    }
+    #ble-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+      transition: background .3s;
+    }
+    #ble-dot.connected    { background: var(--green); }
+    #ble-dot.connecting   { background: var(--yellow); animation: pulse 1s infinite; }
+    #ble-dot.disconnected { background: var(--red); }
+
+    @keyframes pulse {
+      0%,100% { opacity:1; } 50% { opacity:.3; }
+    }
+
+    /* ── Audio Player ────────────────────────────────────────── */
+    #song-name {
+      font-size: .95rem;
+      color: var(--muted);
+      margin-bottom: 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #song-name.loaded { color: var(--text); }
+
+    #progress-wrap {
+      width: 100%;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      margin: 10px 0;
+      cursor: pointer;
+      position: relative;
+    }
+    #progress-bar {
+      height: 100%;
+      border-radius: 3px;
+      background: var(--yellow);
+      width: 0%;
+      transition: width .3s linear;
+      pointer-events: none;
+    }
+
+    .time-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: .75rem;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    #volume-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    #volume-row label { font-size: .8rem; color: var(--muted); flex-shrink: 0; }
+    #volume { flex: 1; accent-color: var(--yellow); }
+
+    /* ── Runden-Steuerung ────────────────────────────────────── */
+    #round-display {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    /* ── Spieler-Grid ────────────────────────────────────────── */
+    #player-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .player-badge {
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: .85rem;
+      font-weight: 600;
+      text-align: center;
+      background: var(--border);
+      color: var(--muted);
+      transition: background .3s, color .3s;
+    }
+    .player-badge.buzzed {
+      color: #000;
+    }
+
+    /* ── Buzz Overlay ────────────────────────────────────────── */
+    #buzz-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.92);
+      z-index: 100;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      cursor: pointer;
+    }
+    #buzz-overlay.visible { display: flex; }
+
+    #buzz-player-name {
+      font-size: clamp(2.5rem, 12vw, 4rem);
+      font-weight: 900;
+      letter-spacing: .05em;
+      text-align: center;
+      line-height: 1.1;
+    }
+    #buzz-subtitle {
+      font-size: 1.3rem;
+      color: var(--text);
+      opacity: .8;
+    }
+    #buzz-round {
+      font-size: .9rem;
+      color: var(--muted);
+    }
+    #buzz-dismiss {
+      margin-top: 24px;
+      padding: 14px 36px;
+      background: rgba(255,255,255,.1);
+      border: 1.5px solid rgba(255,255,255,.25);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 1rem;
+    }
+
+    /* ── Log ─────────────────────────────────────────────────── */
+    #log {
+      flex: 1;
+      overflow-y: auto;
+      font-size: .75rem;
+      color: var(--muted);
+      font-family: "SF Mono", "Fira Code", monospace;
+      line-height: 1.6;
+    }
+    #log .entry { padding: 1px 0; }
+    #log .entry.info  { color: var(--muted); }
+    #log .entry.good  { color: var(--green); }
+    #log .entry.warn  { color: var(--yellow); }
+    #log .entry.buzz  { color: var(--text); font-weight: 600; }
+
+    /* ── Datei-Input ausblenden ──────────────────────────────── */
+    #file-input { display: none; }
+  </style>
+</head>
+<body>
+
+<!-- ── Buzz Overlay ─────────────────────────────────────────── -->
+<div id="buzz-overlay" onclick="dismissBuzz()">
+  <div id="buzz-player-name">SPIELER ?</div>
+  <div id="buzz-subtitle">hat gebuzzert!</div>
+  <div id="buzz-round">Runde 1</div>
+  <button id="buzz-dismiss" onclick="dismissBuzz()">Weiter (Runde reset)</button>
+</div>
+
+<!-- ── Haupt-App ─────────────────────────────────────────────── -->
+<div id="app">
+
+  <h1>🎵 Song Quiz</h1>
+
+  <!-- BLE Verbindung -->
+  <div class="card">
+    <div class="card-title">Verbindung</div>
+    <div id="ble-status">
+      <div id="ble-dot"></div>
+      <span id="ble-label">Nicht verbunden</span>
+    </div>
+    <div style="margin-top:10px;" class="btn-row">
+      <button id="btn-connect" class="btn-blue" onclick="bleConnect()">🔵 Verbinden</button>
+      <button id="btn-disconnect" class="btn-outline" onclick="bleDisconnect()" disabled>Trennen</button>
+    </div>
+  </div>
+
+  <!-- Musik -->
+  <div class="card">
+    <div class="card-title">Musik</div>
+    <div id="song-name">Kein Song geladen</div>
+    <div id="progress-wrap" onclick="seekAudio(event)">
+      <div id="progress-bar"></div>
+    </div>
+    <div class="time-row">
+      <span id="time-cur">0:00</span>
+      <span id="time-dur">0:00</span>
+    </div>
+    <div class="btn-row">
+      <button class="btn-outline" onclick="document.getElementById('file-input').click()">📂 Song laden</button>
+      <button id="btn-play" class="btn-green" onclick="togglePlay()">▶ Play</button>
+    </div>
+    <div id="volume-row">
+      <label>🔊</label>
+      <input type="range" id="volume" min="0" max="1" step="0.02" value="0.8"
+             oninput="audio.volume=this.value" />
+    </div>
+    <input type="file" id="file-input" accept="audio/*" onchange="loadAudioFile(event)" />
+  </div>
+
+  <!-- Runden-Steuerung -->
+  <div class="card">
+    <div class="card-title">Steuerung</div>
+    <div id="round-display">Runde 1</div>
+    <div class="btn-row">
+      <button id="btn-start" class="btn-primary" onclick="sendStart()" disabled>▶ Start Runde</button>
+      <button id="btn-reset" class="btn-red"     onclick="sendReset()" disabled>↺ Reset</button>
+    </div>
+    <div style="margin-top:10px;">
+      <div class="card-title" style="margin-bottom:6px;">Spieler</div>
+      <div id="player-grid">
+        <div class="player-badge" id="p1" style="border:2px solid var(--p1)">Spieler 1</div>
+        <div class="player-badge" id="p2" style="border:2px solid var(--p2)">Spieler 2</div>
+        <div class="player-badge" id="p3" style="border:2px solid var(--p3)">Spieler 3</div>
+        <div class="player-badge" id="p4" style="border:2px solid var(--p4)">Spieler 4</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="card" style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
+    <div class="card-title">Log</div>
+    <div id="log"></div>
+  </div>
+
+</div>
+
+<audio id="audio-el"></audio>
+
+<script>
+// ── Konstanten ────────────────────────────────────────────────
+const SVC_UUID    = '0000ff00-0000-1000-8000-00805f9b34fb';
+const NOTIFY_UUID = '0000ff01-0000-1000-8000-00805f9b34fb';
+const CTRL_UUID   = '0000ff02-0000-1000-8000-00805f9b34fb';
+
+const PLAYER_COLORS = ['', '#40a0ff', '#00e050', '#ff3030', '#ffe000'];
+const PLAYER_TEXT   = ['', '#000',    '#000',    '#fff',    '#000'   ];
+
+// ── State ─────────────────────────────────────────────────────
+let bleDevice    = null;
+let bleServer    = null;
+let ctrlChr      = null;
+let currentRound = 1;
+let audio        = document.getElementById('audio-el');
+
+audio.volume = 0.8;
+
+// ── Log ───────────────────────────────────────────────────────
+function log(msg, cls = 'info') {
+  const el = document.getElementById('log');
+  const ts  = new Date().toLocaleTimeString('de', { hour12: false });
+  el.insertAdjacentHTML('afterbegin',
+    `<div class="entry ${cls}">[${ts}] ${msg}</div>`);
+  // max 80 Einträge
+  while (el.children.length > 80) el.removeChild(el.lastChild);
+}
+
+// ── BLE Verbindung ────────────────────────────────────────────
+async function bleConnect() {
+  if (!navigator.bluetooth) {
+    alert('Web Bluetooth wird nicht unterstützt.\nBitte Bluefy aus dem App Store verwenden.');
+    return;
+  }
+  try {
+    setBleUI('connecting');
+    log('Suche nach BuzzQuiz…', 'info');
+
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [{ name: 'BuzzQuiz' }],
+      optionalServices: [SVC_UUID]
+    });
+
+    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
+    log('Verbinde mit GATT…', 'info');
+    bleServer = await bleDevice.gatt.connect();
+
+    const svc   = await bleServer.getPrimaryService(SVC_UUID);
+    const notChr = await svc.getCharacteristic(NOTIFY_UUID);
+    ctrlChr      = await svc.getCharacteristic(CTRL_UUID);
+
+    await notChr.startNotifications();
+    notChr.addEventListener('characteristicvaluechanged', onNotification);
+
+    setBleUI('connected');
+    log(`Verbunden mit ${bleDevice.name}`, 'good');
+    setControlButtons(true);
+
+  } catch (err) {
+    setBleUI('disconnected');
+    log(`Fehler: ${err.message}`, 'warn');
+    bleDevice = null;
+    setControlButtons(false);
+  }
+}
+
+function bleDisconnect() {
+  if (bleDevice && bleDevice.gatt.connected) {
+    bleDevice.gatt.disconnect();
+  }
+}
+
+function onDisconnected() {
+  setBleUI('disconnected');
+  log('Verbindung getrennt', 'warn');
+  ctrlChr = null;
+  setControlButtons(false);
+}
+
+// ── BLE Notification empfangen ────────────────────────────────
+function onNotification(event) {
+  const raw  = new TextDecoder().decode(event.target.value);
+  log(`← ${raw}`, 'info');
+
+  let msg;
+  try { msg = JSON.parse(raw); }
+  catch { log('JSON-Fehler', 'warn'); return; }
+
+  if (msg.type === 'pause') {
+    handleBuzz(msg.player, msg.round);
+  }
+}
+
+function handleBuzz(playerId, round) {
+  // 1. Audio sofort pausieren
+  audio.pause();
+  updatePlayButton();
+
+  // 2. Runde aktualisieren
+  currentRound = round;
+
+  // 3. Spieler-Badge markieren
+  resetPlayerBadges();
+  const badge = document.getElementById(`p${playerId}`);
+  if (badge) {
+    badge.style.background = PLAYER_COLORS[playerId] || '#fff';
+    badge.style.color      = PLAYER_TEXT[playerId]   || '#000';
+    badge.classList.add('buzzed');
+    badge.textContent = `✓ Spieler ${playerId}`;
+  }
+
+  // 4. Overlay zeigen
+  const overlay = document.getElementById('buzz-overlay');
+  const nameEl  = document.getElementById('buzz-player-name');
+  const rndEl   = document.getElementById('buzz-round');
+
+  nameEl.textContent  = `SPIELER ${playerId}`;
+  nameEl.style.color  = PLAYER_COLORS[playerId] || '#fff';
+  rndEl.textContent   = `Runde ${round}`;
+  overlay.classList.add('visible');
+
+  log(`🔔 BUZZ – Spieler ${playerId} | Runde ${round}`, 'buzz');
+}
+
+function dismissBuzz() {
+  document.getElementById('buzz-overlay').classList.remove('visible');
+  // Auto-Reset ans Board senden damit neue Runde möglich ist
+  sendReset();
+}
+
+// ── BLE Steuerbefehle ─────────────────────────────────────────
+async function sendByte(byte) {
+  if (!ctrlChr) { log('Nicht verbunden', 'warn'); return; }
+  try {
+    await ctrlChr.writeValueWithoutResponse(new Uint8Array([byte]));
+  } catch (e) {
+    log(`Senden fehlgeschlagen: ${e.message}`, 'warn');
+  }
+}
+
+function sendStart() {
+  resetPlayerBadges();
+  updateRoundDisplay();
+  sendByte(0x53); // 'S'
+  log(`→ START (Runde ${currentRound})`, 'good');
+}
+
+function sendReset() {
+  sendByte(0x52); // 'R'
+  currentRound++;
+  updateRoundDisplay();
+  resetPlayerBadges();
+  log(`→ RESET → Runde ${currentRound}`, 'info');
+}
+
+// ── Audio ─────────────────────────────────────────────────────
+function loadAudioFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const url = URL.createObjectURL(file);
+  audio.src = url;
+  audio.load();
+
+  const nameEl = document.getElementById('song-name');
+  nameEl.textContent = file.name;
+  nameEl.classList.add('loaded');
+
+  log(`Song geladen: ${file.name}`, 'good');
+
+  audio.addEventListener('loadedmetadata', updateDuration, { once: true });
+}
+
+function togglePlay() {
+  if (!audio.src) { log('Kein Song geladen', 'warn'); return; }
+  if (audio.paused) {
+    audio.play().catch(e => log(`Play-Fehler: ${e.message}`, 'warn'));
+  } else {
+    audio.pause();
+  }
+  updatePlayButton();
+}
+
+function updatePlayButton() {
+  const btn = document.getElementById('btn-play');
+  btn.textContent = audio.paused ? '▶ Play' : '⏸ Pause';
+  btn.className   = audio.paused ? 'btn-green' : 'btn-outline';
+}
+
+function seekAudio(e) {
+  if (!audio.duration) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const frac = (e.clientX - rect.left) / rect.width;
+  audio.currentTime = frac * audio.duration;
+}
+
+function updateDuration() {
+  document.getElementById('time-dur').textContent = fmtTime(audio.duration);
+}
+
+function fmtTime(s) {
+  if (!s || isNaN(s)) return '0:00';
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, '0')}`;
+}
+
+audio.addEventListener('timeupdate', () => {
+  if (!audio.duration) return;
+  const pct = (audio.currentTime / audio.duration) * 100;
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('time-cur').textContent = fmtTime(audio.currentTime);
+});
+audio.addEventListener('play',  updatePlayButton);
+audio.addEventListener('pause', updatePlayButton);
+audio.addEventListener('ended', () => {
+  document.getElementById('progress-bar').style.width = '0%';
+  updatePlayButton();
+});
+
+// ── UI Helfer ─────────────────────────────────────────────────
+function setBleUI(state) {
+  const dot   = document.getElementById('ble-dot');
+  const label = document.getElementById('ble-label');
+  dot.className = state;
+  label.textContent = {
+    connecting:   'Verbinde…',
+    connected:    `Verbunden mit BuzzQuiz`,
+    disconnected: 'Verbindung getrennt',
+  }[state] || 'Nicht verbunden';
+}
+
+function setControlButtons(enabled) {
+  document.getElementById('btn-start').disabled      = !enabled;
+  document.getElementById('btn-reset').disabled      = !enabled;
+  document.getElementById('btn-disconnect').disabled = !enabled;
+  document.getElementById('btn-connect').disabled    = enabled;
+}
+
+function updateRoundDisplay() {
+  document.getElementById('round-display').textContent = `Runde ${currentRound}`;
+}
+
+function resetPlayerBadges() {
+  for (let i = 1; i <= 4; i++) {
+    const b = document.getElementById(`p${i}`);
+    if (!b) continue;
+    b.classList.remove('buzzed');
+    b.style.background = 'var(--border)';
+    b.style.color      = 'var(--muted)';
+    b.textContent      = `Spieler ${i}`;
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────
+log('Song Quiz bereit. Bitte mit BuzzQuiz verbinden.', 'info');
+log('Benötigt: Bluefy App (iOS) oder Chrome (Desktop)', 'info');
+</script>
+</body>
+</html>
