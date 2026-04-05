@@ -221,10 +221,10 @@
   <div class="card" id="card-players">
     <div class="card-title">Spielerstatus</div>
     <div id="player-grid">
-      <div class="pbadge" id="p1" style="border-color:var(--p1)">Spieler 1</div>
-      <div class="pbadge" id="p2" style="border-color:var(--p2)">Spieler 2</div>
-      <div class="pbadge" id="p3" style="border-color:var(--p3)">Spieler 3</div>
-      <div class="pbadge" id="p4" style="border-color:var(--p4)">Spieler 4</div>
+      <div class="pbadge" id="p1" style="border-color:var(--p1)">Team Blau</div>
+      <div class="pbadge" id="p2" style="border-color:var(--p2)">Team Grün</div>
+      <div class="pbadge" id="p3" style="border-color:var(--p3)">Team Rot</div>
+      <div class="pbadge" id="p4" style="border-color:var(--p4)">Team Gelb</div>
     </div>
   </div>
 
@@ -238,10 +238,10 @@
   <div class="card" id="card-dev">
     <div class="card-title">Virtuelle Buzzer (Dev-Modus)</div>
     <div id="dev-grid">
-      <button class="vbuzz" style="background:var(--p1);color:var(--p1t)" onclick="virtualBuzz(1)">● Spieler 1</button>
-      <button class="vbuzz" style="background:var(--p2);color:var(--p2t)" onclick="virtualBuzz(2)">● Spieler 2</button>
-      <button class="vbuzz" style="background:var(--p3);color:var(--p3t)" onclick="virtualBuzz(3)">● Spieler 3</button>
-      <button class="vbuzz" style="background:var(--p4);color:var(--p4t)" onclick="virtualBuzz(4)">● Spieler 4</button>
+      <button class="vbuzz" style="background:var(--p1);color:var(--p1t)" onclick="virtualBuzz(1)">● Team Blau</button>
+      <button class="vbuzz" style="background:var(--p2);color:var(--p2t)" onclick="virtualBuzz(2)">● Team Grün</button>
+      <button class="vbuzz" style="background:var(--p3);color:var(--p3t)" onclick="virtualBuzz(3)">● Team Rot</button>
+      <button class="vbuzz" style="background:var(--p4);color:var(--p4t)" onclick="virtualBuzz(4)">● Team Gelb</button>
     </div>
   </div>
 
@@ -287,8 +287,9 @@ const SVC_UUID     = '0000ff00-0000-1000-8000-00805f9b34fb';
 const NOTIFY_UUID  = '0000ff01-0000-1000-8000-00805f9b34fb';
 const CTRL_UUID    = '0000ff02-0000-1000-8000-00805f9b34fb';
 
-const P_COLORS = ['','#40a0ff','#00e050','#ff3030','#ffe000'];
-const P_TEXT   = ['','#000',   '#000',   '#fff',   '#000'  ];
+const P_COLORS     = ['','#40a0ff','#00e050','#ff3030','#ffe000'];
+const P_TEXT       = ['','#000',   '#000',   '#fff',   '#000'  ];
+const TEAM_NAMES   = ['','Team Blau','Team Grün','Team Rot','Team Gelb'];
 
 // ══════════════════════════════════════════════
 //  STATE
@@ -697,22 +698,23 @@ async function handleBuzz(player, round) {
   clearInterval(progressTimer);
 
   // 2. Spieler-Badge hervorheben
+  const name  = TEAM_NAMES[player] || `Team ${player}`;
   const badge = document.getElementById(`p${player}`);
   if (badge) {
     badge.style.background = P_COLORS[player] || '#fff';
     badge.style.color      = P_TEXT[player]   || '#000';
     badge.classList.add('active');
-    badge.textContent = `? Spieler ${player} (${scores[player]} Pkt)`;
+    badge.textContent = `● ${name}`;
   }
 
   // 3. Overlay
   const col = P_COLORS[player] || '#fff';
-  document.getElementById('buzz-big').textContent = `SPIELER ${player}`;
+  document.getElementById('buzz-big').textContent = name.toUpperCase();
   document.getElementById('buzz-big').style.color = col;
   document.getElementById('buzz-rnd').textContent = `Runde ${round}`;
   document.getElementById('buzz-overlay').classList.add('show');
 
-  log(`Buzz: Spieler ${player} – Runde ${round}`, 'b');
+  log(`Buzz: ${name} – Runde ${round}`, 'b');
 }
 
 async function onRichtig() {
@@ -720,15 +722,18 @@ async function onRichtig() {
   // Titel aufdecken
   setSpotifyBlur(false);
   // Punkt gutschreiben
-  if (currentBuzzPlayer >= 1 && currentBuzzPlayer <= 4) {
-    scores[currentBuzzPlayer]++;
-    log(`+1 Punkt fuer Spieler ${currentBuzzPlayer} (jetzt ${scores[currentBuzzPlayer]} Pkt)`, 'g');
+  const winner = currentBuzzPlayer;
+  if (winner >= 1 && winner <= 4) {
+    scores[winner]++;
+    // Badge auf ✓ umschalten
+    const badge = document.getElementById(`p${winner}`);
+    if (badge) badge.textContent = `✓ ${TEAM_NAMES[winner]}`;
+    log(`+1 Punkt fuer ${TEAM_NAMES[winner]} (jetzt ${scores[winner]} Pkt)`, 'g');
   }
   // Song weiterlaufen lassen
   await resumeSpotify();
-  // Scoreboard & Badges aktualisieren (Runde noch nicht wechseln – Moderator sieht Ergebnis)
+  // Scoreboard aktualisieren (Runde noch nicht wechseln – Moderator sieht Ergebnis)
   renderScoreboard();
-  updateScoreBadges();
 }
 
 async function onFalsch() {
@@ -752,12 +757,12 @@ async function onFalsch() {
     badge.style.color      = 'var(--muted)';
     badge.classList.remove('active');
     badge.classList.add('locked');
-    badge.textContent = `✗ Spieler ${player} (${scores[player]} Pkt)`;
+    badge.textContent = `✗ ${TEAM_NAMES[player]}`;
   }
 
   // Song weiter abspielen – andere koennen noch buzzen
   await resumeSpotify();
-  log(`Spieler ${player} gesperrt – Runde laeuft weiter`, 'y');
+  log(`${TEAM_NAMES[player]} gesperrt – Runde laeuft weiter`, 'y');
 }
 
 function updateRound() {
@@ -771,7 +776,7 @@ function resetBadges() {
     b.classList.remove('active', 'locked');
     b.style.background = 'var(--border)';
     b.style.color      = 'var(--muted)';
-    b.textContent      = `Spieler ${i}`;
+    b.textContent      = TEAM_NAMES[i];
   }
 }
 
@@ -780,7 +785,7 @@ function updateScoreBadges() {
     const b = document.getElementById(`p${i}`);
     if(!b) continue;
     if(!b.classList.contains('active') && !b.classList.contains('locked')) {
-      b.textContent = `Spieler ${i}`;
+      b.textContent = TEAM_NAMES[i];
     }
   }
   renderScoreboard();
@@ -807,7 +812,7 @@ function renderScoreboard() {
     return `<div class="score-row" style="--pc:${p.color}">
       <div class="score-medal">${medal}</div>
       <div class="score-player">
-        <div class="score-name">Spieler ${p.id}</div>
+        <div class="score-name">${TEAM_NAMES[p.id]}</div>
         <div class="score-bar-wrap">
           <div class="score-bar" style="width:${pct}%"></div>
         </div>
@@ -830,7 +835,7 @@ function setSpotifyBlur(on) {
 // ══════════════════════════════════════════════
 function virtualBuzz(player) {
   handleBuzz(player, currentRound);
-  log(`[DEV] Buzz: Spieler ${player}`, 'y');
+  log(`[DEV] Buzz: ${TEAM_NAMES[player]}`, 'y');
 }
 
 // ══════════════════════════════════════════════
