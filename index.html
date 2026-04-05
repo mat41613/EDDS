@@ -107,16 +107,38 @@
     #buzz-overlay {
       display: none; position: fixed; inset: 0; z-index: 100;
       background: rgba(0,0,0,.93); flex-direction: column;
-      align-items: center; justify-content: center; gap: 12px;
+      align-items: center; justify-content: center; gap: 10px;
     }
     #buzz-overlay.show { display: flex; }
     #buzz-big   { font-size: clamp(3rem,14vw,5rem); font-weight: 900; letter-spacing: .04em; text-align: center; line-height: 1.05; }
     #buzz-sub   { font-size: 1.4rem; color: var(--text); opacity: .85; }
     #buzz-rnd   { font-size: .9rem; color: var(--muted); }
-    #buzz-actions { display: flex; gap: 16px; margin-top: 20px; }
+    #buzz-actions { display: flex; gap: 16px; margin-top: 16px; }
     #buzz-actions button { min-width: 130px; padding: 15px 24px; font-size: 1.1rem; border-radius: 14px; }
     .btn-richtig { background: var(--green); color: #000; }
     .btn-falsch  { background: var(--red);   color: #fff; }
+
+    /* ── Buzz Timer Ring ── */
+    #buzz-timer { position: relative; width: 96px; height: 96px; flex-shrink: 0; }
+    #buzz-timer svg { transform: rotate(-90deg); }
+    #timer-ring-bg { fill: none; stroke: rgba(255,255,255,.1); stroke-width: 7; }
+    #timer-ring    { fill: none; stroke: var(--green); stroke-width: 7; stroke-linecap: round;
+                     stroke-dasharray: 245; stroke-dashoffset: 0;
+                     transition: stroke-dashoffset 1s linear, stroke .4s; }
+    #timer-ring.timeout { animation: timer-flash .4s ease infinite alternate; }
+    @keyframes timer-flash { from { opacity: 1; } to { opacity: .2; } }
+    #timer-num { position: absolute; inset: 0; display: flex; align-items: center;
+                 justify-content: center; font-size: 1.7rem; font-weight: 900;
+                 font-variant-numeric: tabular-nums; }
+
+    /* ── Timer-Einstellung in Spielsteuerung ── */
+    .timer-setting { display: flex; align-items: center; gap: 8px; margin-top: 12px;
+                     justify-content: center; }
+    .timer-setting span { font-size: .82rem; color: var(--muted); }
+    .timer-setting input { width: 58px; background: var(--bg); border: 1.5px solid var(--border);
+                           border-radius: 8px; padding: 6px 8px; color: var(--text);
+                           font-size: 1rem; font-weight: 700; text-align: center; }
+    .timer-setting input:focus { outline: none; border-color: var(--yellow); }
 
     /* ── Spieler-Grid ── */
     .pbadge.locked { opacity: .35; text-decoration: line-through; }
@@ -171,9 +193,19 @@
 <body>
 <!-- Buzz Overlay -->
 <div id="buzz-overlay">
-  <div id="buzz-big">SPIELER ?</div>
+  <div id="buzz-big">TEAM ?</div>
   <div id="buzz-sub">hat gebuzzert!</div>
   <div id="buzz-rnd">Runde 1</div>
+
+  <!-- Timer Ring -->
+  <div id="buzz-timer">
+    <svg width="96" height="96" viewBox="0 0 96 96">
+      <circle id="timer-ring-bg" cx="48" cy="48" r="39"/>
+      <circle id="timer-ring"    cx="48" cy="48" r="39"/>
+    </svg>
+    <div id="timer-num">20</div>
+  </div>
+
   <div id="buzz-actions">
     <button class="btn-richtig" onclick="onRichtig()">✓ Richtig</button>
     <button class="btn-falsch"  onclick="onFalsch()">✗ Falsch</button>
@@ -214,6 +246,11 @@
     <div class="btn-row">
       <button class="btn-yellow" id="btn-start" onclick="startRound()" disabled>▶ Neue Runde</button>
       <button class="btn-green"  id="btn-reset" onclick="resetRound()" disabled>🎵 Auflösung</button>
+    </div>
+    <div class="timer-setting">
+      <span>⏱ Buzz-Timer</span>
+      <input type="number" id="timer-duration" value="20" min="3" max="99" />
+      <span>Sek.</span>
     </div>
   </div>
 
@@ -713,12 +750,14 @@ async function handleBuzz(player, round) {
   document.getElementById('buzz-big').style.color = col;
   document.getElementById('buzz-rnd').textContent = `Runde ${round}`;
   document.getElementById('buzz-overlay').classList.add('show');
+  startBuzzTimer();
 
   log(`Buzz: ${name} – Runde ${round}`, 'b');
 }
 
 async function onRichtig() {
   document.getElementById('buzz-overlay').classList.remove('show');
+  stopBuzzTimer();
   // Titel aufdecken
   setSpotifyBlur(false);
   // Punkt gutschreiben
@@ -738,6 +777,7 @@ async function onRichtig() {
 
 async function onFalsch() {
   document.getElementById('buzz-overlay').classList.remove('show');
+  stopBuzzTimer();
   const player = currentBuzzPlayer;
 
   // Spieler sperren: 2-Byte-Befehl 'L' + player_id
@@ -820,6 +860,59 @@ function renderScoreboard() {
       <div class="score-num">${p.score}</div>
     </div>`;
   }).join('');
+}
+
+// ══════════════════════════════════════════════
+//  BUZZ TIMER
+// ══════════════════════════════════════════════
+const CIRCUMFERENCE = 2 * Math.PI * 39; // r=39 → ≈ 245
+
+let timerInterval  = null;
+let timerRemaining = 0;
+
+function startBuzzTimer() {
+  stopBuzzTimer();
+  const duration = Math.max(3, parseInt(document.getElementById('timer-duration')?.value) || 20);
+  timerRemaining = duration;
+
+  const ring = document.getElementById('timer-ring');
+  const num  = document.getElementById('timer-num');
+  if (ring) {
+    ring.style.strokeDasharray  = CIRCUMFERENCE;
+    ring.style.strokeDashoffset = 0;
+    ring.style.stroke = 'var(--green)';
+    ring.classList.remove('timeout');
+    // Erste Frame ohne Transition setzen, dann aktivieren
+    ring.style.transition = 'none';
+    requestAnimationFrame(() => {
+      ring.style.transition = 'stroke-dashoffset 1s linear, stroke .4s';
+    });
+  }
+  if (num) num.textContent = duration;
+
+  timerInterval = setInterval(() => {
+    timerRemaining--;
+    const progress = Math.max(timerRemaining, 0) / duration;
+    const offset   = CIRCUMFERENCE * (1 - progress);
+    if (ring) {
+      ring.style.strokeDashoffset = offset;
+      if      (progress > 0.5)  ring.style.stroke = 'var(--green)';
+      else if (progress > 0.25) ring.style.stroke = 'var(--yellow)';
+      else                       ring.style.stroke = 'var(--red)';
+    }
+    if (num) num.textContent = Math.max(timerRemaining, 0);
+    if (timerRemaining <= 0) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      onFalsch();
+    }
+  }, 1000);
+}
+
+function stopBuzzTimer() {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  const ring = document.getElementById('timer-ring');
+  if (ring) ring.classList.remove('timeout');
 }
 
 // ══════════════════════════════════════════════
