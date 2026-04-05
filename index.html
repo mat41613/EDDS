@@ -5,593 +5,580 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Song Quiz</title>
   <style>
-    /* ── Reset & Basis ──────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:       #0d0d0d;
-      --surface:  #1a1a1a;
-      --border:   #2e2e2e;
-      --text:     #f0f0f0;
-      --muted:    #888;
-      --yellow:   #ffe000;
-      --green:    #00e050;
-      --red:      #ff3030;
-      --blue:     #40a0ff;
-
-      /* Spieler-Farben (Index 1–4) */
-      --p1: #40a0ff;
-      --p2: #00e050;
-      --p3: #ff3030;
-      --p4: #ffe000;
+      --bg:      #0d0d0d;
+      --surface: #1a1a1a;
+      --border:  #2e2e2e;
+      --text:    #f0f0f0;
+      --muted:   #777;
+      --yellow:  #ffe000;
+      --green:   #00e050;
+      --red:     #ff3030;
+      --blue:    #40a0ff;
+      --p1: #40a0ff; --p1t: #000;
+      --p2: #00e050; --p2t: #000;
+      --p3: #ff3030; --p3t: #fff;
+      --p4: #ffe000; --p4t: #000;
     }
 
     html, body {
-      height: 100%;
-      background: var(--bg);
+      min-height: 100%; background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      overflow: hidden;
     }
 
-    /* ── Layout ─────────────────────────────────────────────── */
-    #app {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      padding: 16px;
-      gap: 12px;
-    }
+    #app { display: flex; flex-direction: column; gap: 12px; padding: 16px; max-width: 480px; margin: 0 auto; }
 
-    h1 {
-      text-align: center;
-      font-size: 1.6rem;
-      font-weight: 700;
-      color: var(--yellow);
-      letter-spacing: 0.08em;
-    }
+    h1 { text-align: center; font-size: 1.6rem; font-weight: 700; color: var(--yellow); letter-spacing: .08em; padding: 8px 0 4px; }
 
-    /* ── Karten ─────────────────────────────────────────────── */
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 14px 16px;
-    }
+    /* ── Karten ── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+    .card-title { font-size: .68rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-bottom: 10px; }
 
-    .card-title {
-      font-size: 0.7rem;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--muted);
-      margin-bottom: 10px;
-    }
-
-    /* ── Buttons ─────────────────────────────────────────────── */
-    button {
-      border: none;
-      border-radius: 10px;
-      padding: 12px 20px;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity .15s, transform .1s;
-      -webkit-tap-highlight-color: transparent;
-    }
-    button:active { opacity: .75; transform: scale(.97); }
-    button:disabled { opacity: .35; cursor: not-allowed; }
-
-    .btn-primary  { background: var(--yellow); color: #000; }
-    .btn-green    { background: var(--green);  color: #000; }
-    .btn-red      { background: var(--red);    color: #fff; }
-    .btn-blue     { background: var(--blue);   color: #000; }
-    .btn-outline  {
-      background: transparent;
-      border: 1.5px solid var(--border);
-      color: var(--text);
-    }
-
-    .btn-row {
-      display: flex;
-      gap: 10px;
-    }
+    /* ── Buttons ── */
+    button { border: none; border-radius: 10px; padding: 11px 18px; font-size: .95rem; font-weight: 600; cursor: pointer; transition: opacity .15s, transform .1s; -webkit-tap-highlight-color: transparent; }
+    button:active { opacity: .72; transform: scale(.97); }
+    button:disabled { opacity: .3; cursor: not-allowed; }
+    .btn-yellow { background: var(--yellow); color: #000; }
+    .btn-green  { background: var(--green);  color: #000; }
+    .btn-red    { background: var(--red);    color: #fff; }
+    .btn-blue   { background: var(--blue);   color: #000; }
+    .btn-spotify { background: #1DB954; color: #fff; }
+    .btn-outline { background: transparent; border: 1.5px solid var(--border); color: var(--text); }
+    .btn-row { display: flex; gap: 8px; }
     .btn-row button { flex: 1; }
 
-    /* ── BLE Status ──────────────────────────────────────────── */
-    #ble-status {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: .9rem;
-    }
-    #ble-dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      background: var(--muted);
-      flex-shrink: 0;
-      transition: background .3s;
-    }
-    #ble-dot.connected    { background: var(--green); }
-    #ble-dot.connecting   { background: var(--yellow); animation: pulse 1s infinite; }
-    #ble-dot.disconnected { background: var(--red); }
+    /* ── Status-Dots ── */
+    .status-row { display: flex; align-items: center; gap: 8px; font-size: .9rem; margin-bottom: 10px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background .3s; }
+    .dot.ok   { background: var(--green); }
+    .dot.busy { background: var(--yellow); animation: pulse 1s infinite; }
+    .dot.err  { background: var(--red); }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.25} }
 
-    @keyframes pulse {
-      0%,100% { opacity:1; } 50% { opacity:.3; }
-    }
+    /* ── Spotify aktuell laufend ── */
+    #spotify-now { display: flex; align-items: center; gap: 10px; margin: 10px 0; min-height: 48px; }
+    #spotify-art { width: 48px; height: 48px; border-radius: 6px; background: var(--border); flex-shrink: 0; object-fit: cover; }
+    #spotify-info { overflow: hidden; }
+    #spotify-track { font-size: .9rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #spotify-artist { font-size: .78rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    /* ── Audio Player ────────────────────────────────────────── */
-    #song-name {
-      font-size: .95rem;
-      color: var(--muted);
-      margin-bottom: 10px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    #song-name.loaded { color: var(--text); }
+    /* ── Progress ── */
+    #prog-wrap { width: 100%; height: 5px; background: var(--border); border-radius: 3px; margin: 6px 0 2px; cursor: pointer; }
+    #prog-bar  { height: 100%; border-radius: 3px; background: #1DB954; width: 0%; pointer-events: none; }
+    .time-row  { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted); }
 
-    #progress-wrap {
-      width: 100%;
-      height: 6px;
-      background: var(--border);
-      border-radius: 3px;
-      margin: 10px 0;
-      cursor: pointer;
-      position: relative;
-    }
-    #progress-bar {
-      height: 100%;
-      border-radius: 3px;
-      background: var(--yellow);
-      width: 0%;
-      transition: width .3s linear;
-      pointer-events: none;
-    }
+    /* ── Steuerung ── */
+    #round-num { font-size: 1.05rem; font-weight: 600; text-align: center; color: var(--muted); margin-bottom: 10px; }
 
-    .time-row {
-      display: flex;
-      justify-content: space-between;
-      font-size: .75rem;
-      color: var(--muted);
-      margin-bottom: 10px;
-    }
+    /* ── Spieler-Grid ── */
+    #player-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .pbadge { border-radius: 10px; padding: 8px; font-size: .82rem; font-weight: 600; text-align: center; background: var(--border); color: var(--muted); border: 2px solid transparent; transition: all .25s; }
+    .pbadge.active { color: #000 !important; }
 
-    #volume-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-top: 10px;
-    }
-    #volume-row label { font-size: .8rem; color: var(--muted); flex-shrink: 0; }
-    #volume { flex: 1; accent-color: var(--yellow); }
-
-    /* ── Runden-Steuerung ────────────────────────────────────── */
-    #round-display {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: var(--muted);
-      text-align: center;
-      margin-bottom: 10px;
-    }
-
-    /* ── Spieler-Grid ────────────────────────────────────────── */
-    #player-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-    .player-badge {
-      border-radius: 10px;
-      padding: 8px 10px;
-      font-size: .85rem;
-      font-weight: 600;
-      text-align: center;
-      background: var(--border);
-      color: var(--muted);
-      transition: background .3s, color .3s;
-    }
-    .player-badge.buzzed {
-      color: #000;
-    }
-
-    /* ── Buzz Overlay ────────────────────────────────────────── */
+    /* ── Buzz Overlay ── */
     #buzz-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,.92);
-      z-index: 100;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 16px;
-      cursor: pointer;
+      display: none; position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,.93); flex-direction: column;
+      align-items: center; justify-content: center; gap: 12px; cursor: pointer;
     }
-    #buzz-overlay.visible { display: flex; }
+    #buzz-overlay.show { display: flex; }
+    #buzz-big   { font-size: clamp(3rem,14vw,5rem); font-weight: 900; letter-spacing: .04em; text-align: center; line-height: 1.05; }
+    #buzz-sub   { font-size: 1.4rem; color: var(--text); opacity: .85; }
+    #buzz-rnd   { font-size: .9rem; color: var(--muted); }
+    #buzz-btn   { margin-top: 20px; padding: 14px 40px; background: rgba(255,255,255,.1); border: 1.5px solid rgba(255,255,255,.2); border-radius: 12px; color: var(--text); font-size: 1rem; font-weight: 600; }
 
-    #buzz-player-name {
-      font-size: clamp(2.5rem, 12vw, 4rem);
-      font-weight: 900;
-      letter-spacing: .05em;
-      text-align: center;
-      line-height: 1.1;
-    }
-    #buzz-subtitle {
-      font-size: 1.3rem;
-      color: var(--text);
-      opacity: .8;
-    }
-    #buzz-round {
-      font-size: .9rem;
-      color: var(--muted);
-    }
-    #buzz-dismiss {
-      margin-top: 24px;
-      padding: 14px 36px;
-      background: rgba(255,255,255,.1);
-      border: 1.5px solid rgba(255,255,255,.25);
-      border-radius: 12px;
-      color: var(--text);
-      font-size: 1rem;
-    }
-
-    /* ── Log ─────────────────────────────────────────────────── */
-    #log {
-      flex: 1;
-      overflow-y: auto;
-      font-size: .75rem;
-      color: var(--muted);
-      font-family: "SF Mono", "Fira Code", monospace;
-      line-height: 1.6;
-    }
-    #log .entry { padding: 1px 0; }
-    #log .entry.info  { color: var(--muted); }
-    #log .entry.good  { color: var(--green); }
-    #log .entry.warn  { color: var(--yellow); }
-    #log .entry.buzz  { color: var(--text); font-weight: 600; }
-
-    /* ── Datei-Input ausblenden ──────────────────────────────── */
-    #file-input { display: none; }
+    /* ── Log ── */
+    #log-box { max-height: 120px; overflow-y: auto; font-size: .72rem; color: var(--muted); font-family: "SF Mono", monospace; line-height: 1.6; }
+    .le { padding: 1px 0; }
+    .le.g { color: var(--green); }
+    .le.y { color: var(--yellow); }
+    .le.b { color: var(--text); font-weight: 600; }
   </style>
 </head>
 <body>
-
-<!-- ── Buzz Overlay ─────────────────────────────────────────── -->
+<!-- Buzz Overlay -->
 <div id="buzz-overlay" onclick="dismissBuzz()">
-  <div id="buzz-player-name">SPIELER ?</div>
-  <div id="buzz-subtitle">hat gebuzzert!</div>
-  <div id="buzz-round">Runde 1</div>
-  <button id="buzz-dismiss" onclick="dismissBuzz()">Weiter (Runde reset)</button>
+  <div id="buzz-big">SPIELER ?</div>
+  <div id="buzz-sub">hat gebuzzert!</div>
+  <div id="buzz-rnd">Runde 1</div>
+  <button id="buzz-btn" onclick="dismissBuzz()">Weiter → nächste Runde</button>
 </div>
 
-<!-- ── Haupt-App ─────────────────────────────────────────────── -->
 <div id="app">
-
   <h1>🎵 Song Quiz</h1>
 
-  <!-- BLE Verbindung -->
+  <!-- ── Spotify ── -->
   <div class="card">
-    <div class="card-title">Verbindung</div>
-    <div id="ble-status">
-      <div id="ble-dot"></div>
-      <span id="ble-label">Nicht verbunden</span>
+    <div class="card-title">Spotify</div>
+    <div class="status-row">
+      <div class="dot" id="sp-dot"></div>
+      <span id="sp-label">Nicht eingeloggt</span>
     </div>
-    <div style="margin-top:10px;" class="btn-row">
-      <button id="btn-connect" class="btn-blue" onclick="bleConnect()">🔵 Verbinden</button>
-      <button id="btn-disconnect" class="btn-outline" onclick="bleDisconnect()" disabled>Trennen</button>
-    </div>
-  </div>
-
-  <!-- Musik -->
-  <div class="card">
-    <div class="card-title">Musik</div>
-    <div id="song-name">Kein Song geladen</div>
-    <div id="progress-wrap" onclick="seekAudio(event)">
-      <div id="progress-bar"></div>
-    </div>
-    <div class="time-row">
-      <span id="time-cur">0:00</span>
-      <span id="time-dur">0:00</span>
-    </div>
-    <div class="btn-row">
-      <button class="btn-outline" onclick="document.getElementById('file-input').click()">📂 Song laden</button>
-      <button id="btn-play" class="btn-green" onclick="togglePlay()">▶ Play</button>
-    </div>
-    <div id="volume-row">
-      <label>🔊</label>
-      <input type="range" id="volume" min="0" max="1" step="0.02" value="0.8"
-             oninput="audio.volume=this.value" />
-    </div>
-    <input type="file" id="file-input" accept="audio/*" onchange="loadAudioFile(event)" />
-  </div>
-
-  <!-- Runden-Steuerung -->
-  <div class="card">
-    <div class="card-title">Steuerung</div>
-    <div id="round-display">Runde 1</div>
-    <div class="btn-row">
-      <button id="btn-start" class="btn-primary" onclick="sendStart()" disabled>▶ Start Runde</button>
-      <button id="btn-reset" class="btn-red"     onclick="sendReset()" disabled>↺ Reset</button>
-    </div>
-    <div style="margin-top:10px;">
-      <div class="card-title" style="margin-bottom:6px;">Spieler</div>
-      <div id="player-grid">
-        <div class="player-badge" id="p1" style="border:2px solid var(--p1)">Spieler 1</div>
-        <div class="player-badge" id="p2" style="border:2px solid var(--p2)">Spieler 2</div>
-        <div class="player-badge" id="p3" style="border:2px solid var(--p3)">Spieler 3</div>
-        <div class="player-badge" id="p4" style="border:2px solid var(--p4)">Spieler 4</div>
+    <div id="spotify-now" style="display:none">
+      <img id="spotify-art" src="" alt="" />
+      <div id="spotify-info">
+        <div id="spotify-track">—</div>
+        <div id="spotify-artist">—</div>
+        <div id="prog-wrap" onclick="seekSpotify(event)">
+          <div id="prog-bar"></div>
+        </div>
+        <div class="time-row"><span id="t-cur">0:00</span><span id="t-dur">0:00</span></div>
       </div>
     </div>
+    <div class="btn-row">
+      <button class="btn-spotify" id="btn-sp-login"  onclick="spotifyLogin()">🎵 Mit Spotify einloggen</button>
+      <button class="btn-outline" id="btn-sp-logout" onclick="spotifyLogout()" style="display:none">Ausloggen</button>
+    </div>
   </div>
 
-  <!-- Log -->
-  <div class="card" style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
+  <!-- ── BLE ── -->
+  <div class="card">
+    <div class="card-title">BuzzQuiz Board</div>
+    <div class="status-row">
+      <div class="dot" id="ble-dot"></div>
+      <span id="ble-label">Nicht verbunden</span>
+    </div>
+    <div class="btn-row">
+      <button class="btn-blue"    id="btn-ble-on"  onclick="bleConnect()">🔵 Verbinden</button>
+      <button class="btn-outline" id="btn-ble-off" onclick="bleDisconnect()" disabled>Trennen</button>
+    </div>
+  </div>
+
+  <!-- ── Steuerung ── -->
+  <div class="card">
+    <div class="card-title">Spielsteuerung</div>
+    <div id="round-num">Runde 1</div>
+    <div class="btn-row">
+      <button class="btn-yellow" id="btn-start" onclick="startRound()" disabled>▶ Runde starten</button>
+      <button class="btn-red"    id="btn-reset" onclick="resetRound()" disabled>↺ Reset</button>
+    </div>
+    <div id="player-grid">
+      <div class="pbadge" id="p1" style="border-color:var(--p1)">Spieler 1</div>
+      <div class="pbadge" id="p2" style="border-color:var(--p2)">Spieler 2</div>
+      <div class="pbadge" id="p3" style="border-color:var(--p3)">Spieler 3</div>
+      <div class="pbadge" id="p4" style="border-color:var(--p4)">Spieler 4</div>
+    </div>
+  </div>
+
+  <!-- ── Log ── -->
+  <div class="card">
     <div class="card-title">Log</div>
-    <div id="log"></div>
+    <div id="log-box"></div>
   </div>
-
 </div>
 
-<audio id="audio-el"></audio>
-
 <script>
-// ── Konstanten ────────────────────────────────────────────────
-const SVC_UUID    = '0000ff00-0000-1000-8000-00805f9b34fb';
-const NOTIFY_UUID = '0000ff01-0000-1000-8000-00805f9b34fb';
-const CTRL_UUID   = '0000ff02-0000-1000-8000-00805f9b34fb';
+// ══════════════════════════════════════════════
+//  KONFIGURATION
+// ══════════════════════════════════════════════
+const CLIENT_ID    = '7935f35ec0bf48f8b259b23a5710eb30';
+const REDIRECT_URI = 'https://mat41613.github.io/EDDS/';
+const SCOPES       = 'user-read-playback-state user-modify-playback-state';
 
-const PLAYER_COLORS = ['', '#40a0ff', '#00e050', '#ff3030', '#ffe000'];
-const PLAYER_TEXT   = ['', '#000',    '#000',    '#fff',    '#000'   ];
+const SVC_UUID     = '0000ff00-0000-1000-8000-00805f9b34fb';
+const NOTIFY_UUID  = '0000ff01-0000-1000-8000-00805f9b34fb';
+const CTRL_UUID    = '0000ff02-0000-1000-8000-00805f9b34fb';
 
-// ── State ─────────────────────────────────────────────────────
+const P_COLORS = ['','#40a0ff','#00e050','#ff3030','#ffe000'];
+const P_TEXT   = ['','#000',   '#000',   '#fff',   '#000'  ];
+
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+let accessToken  = null;
+let tokenExpires = 0;
+let refreshToken = null;
 let bleDevice    = null;
-let bleServer    = null;
 let ctrlChr      = null;
 let currentRound = 1;
-let audio        = document.getElementById('audio-el');
+let progressTimer = null;
+let currentProgress = 0;
+let currentDuration = 0;
 
-audio.volume = 0.8;
-
-// ── Log ───────────────────────────────────────────────────────
-function log(msg, cls = 'info') {
-  const el = document.getElementById('log');
-  const ts  = new Date().toLocaleTimeString('de', { hour12: false });
-  el.insertAdjacentHTML('afterbegin',
-    `<div class="entry ${cls}">[${ts}] ${msg}</div>`);
-  // max 80 Einträge
-  while (el.children.length > 80) el.removeChild(el.lastChild);
+// ══════════════════════════════════════════════
+//  LOG
+// ══════════════════════════════════════════════
+function log(msg, cls='') {
+  const ts = new Date().toLocaleTimeString('de',{hour12:false});
+  const box = document.getElementById('log-box');
+  box.insertAdjacentHTML('afterbegin',`<div class="le ${cls}">[${ts}] ${msg}</div>`);
+  while(box.children.length > 60) box.removeChild(box.lastChild);
 }
 
-// ── BLE Verbindung ────────────────────────────────────────────
+// ══════════════════════════════════════════════
+//  SPOTIFY – PKCE OAuth
+// ══════════════════════════════════════════════
+function b64url(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+
+async function spotifyLogin() {
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(96)));
+  const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  localStorage.setItem('pkce_v', verifier);
+
+  const url = 'https://accounts.spotify.com/authorize?' + new URLSearchParams({
+    client_id:             CLIENT_ID,
+    response_type:         'code',
+    redirect_uri:          REDIRECT_URI,
+    code_challenge_method: 'S256',
+    code_challenge:        challenge,
+    scope:                 SCOPES,
+  });
+  location.href = url;
+}
+
+async function handleCallback(code) {
+  // URL sofort sauber machen
+  history.replaceState(null,'', location.pathname);
+
+  const verifier = localStorage.getItem('pkce_v');
+  if (!verifier) { log('PKCE-Fehler: kein Verifier', 'y'); return; }
+
+  const res = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id:     CLIENT_ID,
+      grant_type:    'authorization_code',
+      code,
+      redirect_uri:  REDIRECT_URI,
+      code_verifier: verifier,
+    })
+  });
+
+  const data = await res.json();
+  if (data.access_token) {
+    saveTokens(data);
+    log('Spotify eingeloggt', 'g');
+    updateSpotifyUI(true);
+    startPolling();
+  } else {
+    log('Token-Fehler: ' + JSON.stringify(data), 'y');
+  }
+}
+
+async function refreshAccessToken() {
+  const rt = localStorage.getItem('sp_refresh');
+  if (!rt) return false;
+
+  const res = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id:     CLIENT_ID,
+      grant_type:    'refresh_token',
+      refresh_token: rt,
+    })
+  });
+
+  const data = await res.json();
+  if (data.access_token) {
+    saveTokens(data);
+    return true;
+  }
+  return false;
+}
+
+function saveTokens(data) {
+  accessToken  = data.access_token;
+  tokenExpires = Date.now() + (data.expires_in - 60) * 1000;
+  if (data.refresh_token) {
+    refreshToken = data.refresh_token;
+    localStorage.setItem('sp_refresh', refreshToken);
+  }
+  localStorage.setItem('sp_token',   accessToken);
+  localStorage.setItem('sp_expires', tokenExpires);
+}
+
+function spotifyLogout() {
+  accessToken = null; refreshToken = null; tokenExpires = 0;
+  localStorage.removeItem('sp_token');
+  localStorage.removeItem('sp_expires');
+  localStorage.removeItem('sp_refresh');
+  localStorage.removeItem('pkce_v');
+  stopPolling();
+  updateSpotifyUI(false);
+  resetNowPlaying();
+  log('Spotify ausgeloggt');
+}
+
+async function getToken() {
+  if (accessToken && Date.now() < tokenExpires) return accessToken;
+  if (await refreshAccessToken()) return accessToken;
+  spotifyLogout();
+  return null;
+}
+
+// ══════════════════════════════════════════════
+//  SPOTIFY – API CALLS
+// ══════════════════════════════════════════════
+async function spotifyCall(method, path, body) {
+  const token = await getToken();
+  if (!token) return null;
+
+  const opts = {
+    method,
+    headers: { 'Authorization': 'Bearer ' + token }
+  };
+  if (body) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch('https://api.spotify.com/v1' + path, opts);
+  if (res.status === 401) { await refreshAccessToken(); return null; }
+  if (res.status === 204 || res.status === 202) return {};
+  if (!res.ok) return null;
+  try { return await res.json(); } catch { return {}; }
+}
+
+async function pauseSpotify() {
+  const result = await spotifyCall('PUT', '/me/player/pause');
+  if (result !== null) log('Spotify: pausiert', 'g');
+  else log('Spotify pause fehlgeschlagen (kein aktives Geraet?)', 'y');
+}
+
+async function seekSpotify(e) {
+  if (!currentDuration) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const ms   = Math.round(((e.clientX - rect.left) / rect.width) * currentDuration);
+  await spotifyCall('PUT', `/me/player/seek?position_ms=${ms}`);
+}
+
+// ══════════════════════════════════════════════
+//  SPOTIFY – POLLING (aktueller Song)
+// ══════════════════════════════════════════════
+let pollTimer = null;
+
+function startPolling() { if (!pollTimer) { fetchNowPlaying(); pollTimer = setInterval(fetchNowPlaying, 5000); } }
+function stopPolling()  { clearInterval(pollTimer); pollTimer = null; clearInterval(progressTimer); progressTimer = null; }
+
+async function fetchNowPlaying() {
+  const data = await spotifyCall('GET', '/me/player?market=DE');
+  if (!data || !data.item) { resetNowPlaying(); return; }
+
+  const track   = data.item;
+  const art     = track.album.images[2]?.url || track.album.images[0]?.url || '';
+  const name    = track.name;
+  const artists = track.artists.map(a=>a.name).join(', ');
+
+  document.getElementById('spotify-art').src    = art;
+  document.getElementById('spotify-track').textContent  = name;
+  document.getElementById('spotify-artist').textContent = artists;
+  document.getElementById('spotify-now').style.display  = 'flex';
+
+  currentProgress = data.progress_ms || 0;
+  currentDuration = track.duration_ms || 1;
+
+  updateProgress();
+  clearInterval(progressTimer);
+  if (data.is_playing) {
+    progressTimer = setInterval(() => {
+      currentProgress = Math.min(currentProgress + 1000, currentDuration);
+      updateProgress();
+    }, 1000);
+  }
+}
+
+function updateProgress() {
+  const pct = (currentProgress / currentDuration) * 100;
+  document.getElementById('prog-bar').style.width = pct + '%';
+  document.getElementById('t-cur').textContent = fmtMs(currentProgress);
+  document.getElementById('t-dur').textContent = fmtMs(currentDuration);
+}
+
+function resetNowPlaying() {
+  document.getElementById('spotify-now').style.display = 'none';
+  clearInterval(progressTimer); progressTimer = null;
+}
+
+function fmtMs(ms) {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+}
+
+// ══════════════════════════════════════════════
+//  BLE
+// ══════════════════════════════════════════════
 async function bleConnect() {
   if (!navigator.bluetooth) {
-    alert('Web Bluetooth wird nicht unterstützt.\nBitte Bluefy aus dem App Store verwenden.');
+    alert('Web Bluetooth nicht verfügbar.\nAuf iPhone: Bluefy App verwenden.\nAuf Desktop: Chrome verwenden.');
     return;
   }
   try {
-    setBleUI('connecting');
-    log('Suche nach BuzzQuiz…', 'info');
-
+    setBleDot('busy', 'Verbinde…');
     bleDevice = await navigator.bluetooth.requestDevice({
       filters: [{ name: 'BuzzQuiz' }],
       optionalServices: [SVC_UUID]
     });
+    bleDevice.addEventListener('gattserverdisconnected', onBleDisconnect);
 
-    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
-
-    log('Verbinde mit GATT…', 'info');
-    bleServer = await bleDevice.gatt.connect();
-
-    const svc   = await bleServer.getPrimaryService(SVC_UUID);
+    const server = await bleDevice.gatt.connect();
+    const svc    = await server.getPrimaryService(SVC_UUID);
     const notChr = await svc.getCharacteristic(NOTIFY_UUID);
     ctrlChr      = await svc.getCharacteristic(CTRL_UUID);
 
     await notChr.startNotifications();
-    notChr.addEventListener('characteristicvaluechanged', onNotification);
+    notChr.addEventListener('characteristicvaluechanged', onBleNotify);
 
-    setBleUI('connected');
-    log(`Verbunden mit ${bleDevice.name}`, 'good');
-    setControlButtons(true);
-
-  } catch (err) {
-    setBleUI('disconnected');
-    log(`Fehler: ${err.message}`, 'warn');
-    bleDevice = null;
-    setControlButtons(false);
+    setBleDot('ok', `Verbunden: ${bleDevice.name}`);
+    document.getElementById('btn-ble-on').disabled  = true;
+    document.getElementById('btn-ble-off').disabled = false;
+    document.getElementById('btn-start').disabled   = false;
+    document.getElementById('btn-reset').disabled   = false;
+    log('BLE verbunden', 'g');
+  } catch(e) {
+    setBleDot('err', 'Verbindung fehlgeschlagen');
+    log('BLE Fehler: ' + e.message, 'y');
   }
 }
 
 function bleDisconnect() {
-  if (bleDevice && bleDevice.gatt.connected) {
-    bleDevice.gatt.disconnect();
-  }
+  bleDevice?.gatt?.disconnect();
 }
 
-function onDisconnected() {
-  setBleUI('disconnected');
-  log('Verbindung getrennt', 'warn');
+function onBleDisconnect() {
   ctrlChr = null;
-  setControlButtons(false);
+  setBleDot('err', 'Getrennt');
+  document.getElementById('btn-ble-on').disabled  = false;
+  document.getElementById('btn-ble-off').disabled = true;
+  document.getElementById('btn-start').disabled   = true;
+  document.getElementById('btn-reset').disabled   = true;
+  log('BLE getrennt', 'y');
 }
 
-// ── BLE Notification empfangen ────────────────────────────────
-function onNotification(event) {
-  const raw  = new TextDecoder().decode(event.target.value);
-  log(`← ${raw}`, 'info');
-
+function onBleNotify(e) {
+  const raw = new TextDecoder().decode(e.target.value);
+  log('← ' + raw);
   let msg;
-  try { msg = JSON.parse(raw); }
-  catch { log('JSON-Fehler', 'warn'); return; }
-
-  if (msg.type === 'pause') {
-    handleBuzz(msg.player, msg.round);
-  }
+  try { msg = JSON.parse(raw); } catch { return; }
+  if (msg.type === 'pause') handleBuzz(msg.player, msg.round);
 }
 
-function handleBuzz(playerId, round) {
-  // 1. Audio sofort pausieren
-  audio.pause();
-  updatePlayButton();
+async function sendByte(b) {
+  if (!ctrlChr) return;
+  try { await ctrlChr.writeValueWithoutResponse(new Uint8Array([b])); }
+  catch(e) { log('BLE senden fehlgeschlagen: '+e.message,'y'); }
+}
 
-  // 2. Runde aktualisieren
+// ══════════════════════════════════════════════
+//  SPIELLOGIK
+// ══════════════════════════════════════════════
+function startRound() {
+  resetBadges();
+  updateRound();
+  sendByte(0x53); // 'S'
+  log(`→ START Runde ${currentRound}`, 'g');
+}
+
+function resetRound() {
+  sendByte(0x52); // 'R'
+  currentRound++;
+  updateRound();
+  resetBadges();
+  log(`→ RESET → Runde ${currentRound}`);
+}
+
+async function handleBuzz(player, round) {
   currentRound = round;
 
-  // 3. Spieler-Badge markieren
-  resetPlayerBadges();
-  const badge = document.getElementById(`p${playerId}`);
+  // 1. Spotify sofort pausieren
+  await pauseSpotify();
+  clearInterval(progressTimer);
+
+  // 2. Spieler-Badge hervorheben
+  resetBadges();
+  const badge = document.getElementById(`p${player}`);
   if (badge) {
-    badge.style.background = PLAYER_COLORS[playerId] || '#fff';
-    badge.style.color      = PLAYER_TEXT[playerId]   || '#000';
-    badge.classList.add('buzzed');
-    badge.textContent = `✓ Spieler ${playerId}`;
+    badge.style.background = P_COLORS[player] || '#fff';
+    badge.style.color      = P_TEXT[player]   || '#000';
+    badge.classList.add('active');
+    badge.textContent = `✓ Spieler ${player}`;
   }
 
-  // 4. Overlay zeigen
-  const overlay = document.getElementById('buzz-overlay');
-  const nameEl  = document.getElementById('buzz-player-name');
-  const rndEl   = document.getElementById('buzz-round');
+  // 3. Overlay
+  const col = P_COLORS[player] || '#fff';
+  document.getElementById('buzz-big').textContent = `SPIELER ${player}`;
+  document.getElementById('buzz-big').style.color = col;
+  document.getElementById('buzz-rnd').textContent = `Runde ${round}`;
+  document.getElementById('buzz-overlay').classList.add('show');
 
-  nameEl.textContent  = `SPIELER ${playerId}`;
-  nameEl.style.color  = PLAYER_COLORS[playerId] || '#fff';
-  rndEl.textContent   = `Runde ${round}`;
-  overlay.classList.add('visible');
-
-  log(`🔔 BUZZ – Spieler ${playerId} | Runde ${round}`, 'buzz');
+  log(`🔔 Spieler ${player} – Runde ${round}`, 'b');
 }
 
 function dismissBuzz() {
-  document.getElementById('buzz-overlay').classList.remove('visible');
-  // Auto-Reset ans Board senden damit neue Runde möglich ist
-  sendReset();
+  document.getElementById('buzz-overlay').classList.remove('show');
+  resetRound();
 }
 
-// ── BLE Steuerbefehle ─────────────────────────────────────────
-async function sendByte(byte) {
-  if (!ctrlChr) { log('Nicht verbunden', 'warn'); return; }
-  try {
-    await ctrlChr.writeValueWithoutResponse(new Uint8Array([byte]));
-  } catch (e) {
-    log(`Senden fehlgeschlagen: ${e.message}`, 'warn');
-  }
+function updateRound() {
+  document.getElementById('round-num').textContent = `Runde ${currentRound}`;
 }
 
-function sendStart() {
-  resetPlayerBadges();
-  updateRoundDisplay();
-  sendByte(0x53); // 'S'
-  log(`→ START (Runde ${currentRound})`, 'good');
-}
-
-function sendReset() {
-  sendByte(0x52); // 'R'
-  currentRound++;
-  updateRoundDisplay();
-  resetPlayerBadges();
-  log(`→ RESET → Runde ${currentRound}`, 'info');
-}
-
-// ── Audio ─────────────────────────────────────────────────────
-function loadAudioFile(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  const url = URL.createObjectURL(file);
-  audio.src = url;
-  audio.load();
-
-  const nameEl = document.getElementById('song-name');
-  nameEl.textContent = file.name;
-  nameEl.classList.add('loaded');
-
-  log(`Song geladen: ${file.name}`, 'good');
-
-  audio.addEventListener('loadedmetadata', updateDuration, { once: true });
-}
-
-function togglePlay() {
-  if (!audio.src) { log('Kein Song geladen', 'warn'); return; }
-  if (audio.paused) {
-    audio.play().catch(e => log(`Play-Fehler: ${e.message}`, 'warn'));
-  } else {
-    audio.pause();
-  }
-  updatePlayButton();
-}
-
-function updatePlayButton() {
-  const btn = document.getElementById('btn-play');
-  btn.textContent = audio.paused ? '▶ Play' : '⏸ Pause';
-  btn.className   = audio.paused ? 'btn-green' : 'btn-outline';
-}
-
-function seekAudio(e) {
-  if (!audio.duration) return;
-  const rect = e.currentTarget.getBoundingClientRect();
-  const frac = (e.clientX - rect.left) / rect.width;
-  audio.currentTime = frac * audio.duration;
-}
-
-function updateDuration() {
-  document.getElementById('time-dur').textContent = fmtTime(audio.duration);
-}
-
-function fmtTime(s) {
-  if (!s || isNaN(s)) return '0:00';
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${sec.toString().padStart(2, '0')}`;
-}
-
-audio.addEventListener('timeupdate', () => {
-  if (!audio.duration) return;
-  const pct = (audio.currentTime / audio.duration) * 100;
-  document.getElementById('progress-bar').style.width = pct + '%';
-  document.getElementById('time-cur').textContent = fmtTime(audio.currentTime);
-});
-audio.addEventListener('play',  updatePlayButton);
-audio.addEventListener('pause', updatePlayButton);
-audio.addEventListener('ended', () => {
-  document.getElementById('progress-bar').style.width = '0%';
-  updatePlayButton();
-});
-
-// ── UI Helfer ─────────────────────────────────────────────────
-function setBleUI(state) {
-  const dot   = document.getElementById('ble-dot');
-  const label = document.getElementById('ble-label');
-  dot.className = state;
-  label.textContent = {
-    connecting:   'Verbinde…',
-    connected:    `Verbunden mit BuzzQuiz`,
-    disconnected: 'Verbindung getrennt',
-  }[state] || 'Nicht verbunden';
-}
-
-function setControlButtons(enabled) {
-  document.getElementById('btn-start').disabled      = !enabled;
-  document.getElementById('btn-reset').disabled      = !enabled;
-  document.getElementById('btn-disconnect').disabled = !enabled;
-  document.getElementById('btn-connect').disabled    = enabled;
-}
-
-function updateRoundDisplay() {
-  document.getElementById('round-display').textContent = `Runde ${currentRound}`;
-}
-
-function resetPlayerBadges() {
-  for (let i = 1; i <= 4; i++) {
+function resetBadges() {
+  for(let i=1;i<=4;i++) {
     const b = document.getElementById(`p${i}`);
-    if (!b) continue;
-    b.classList.remove('buzzed');
+    if(!b) continue;
+    b.classList.remove('active');
     b.style.background = 'var(--border)';
     b.style.color      = 'var(--muted)';
     b.textContent      = `Spieler ${i}`;
   }
 }
 
-// ── Init ──────────────────────────────────────────────────────
-log('Song Quiz bereit. Bitte mit BuzzQuiz verbinden.', 'info');
-log('Benötigt: Bluefy App (iOS) oder Chrome (Desktop)', 'info');
+// ══════════════════════════════════════════════
+//  UI HELPERS
+// ══════════════════════════════════════════════
+function setBleDot(state, label) {
+  document.getElementById('ble-dot').className   = 'dot ' + {ok:'ok',busy:'busy',err:'err'}[state];
+  document.getElementById('ble-label').textContent = label;
+}
+
+function updateSpotifyUI(loggedIn) {
+  document.getElementById('sp-dot').className        = 'dot ' + (loggedIn ? 'ok' : '');
+  document.getElementById('sp-label').textContent    = loggedIn ? 'Eingeloggt' : 'Nicht eingeloggt';
+  document.getElementById('btn-sp-login').style.display  = loggedIn ? 'none'  : '';
+  document.getElementById('btn-sp-logout').style.display = loggedIn ? ''      : 'none';
+}
+
+// ══════════════════════════════════════════════
+//  INIT – beim Laden der Seite
+// ══════════════════════════════════════════════
+(async function init() {
+  // 1. OAuth Callback abfangen
+  const params = new URLSearchParams(location.search);
+  if (params.has('code')) {
+    await handleCallback(params.get('code'));
+    return;
+  }
+
+  // 2. Gespeicherten Token laden
+  const saved    = localStorage.getItem('sp_token');
+  const expires  = parseInt(localStorage.getItem('sp_expires') || '0');
+  refreshToken   = localStorage.getItem('sp_refresh');
+
+  if (saved && Date.now() < expires) {
+    accessToken  = saved;
+    tokenExpires = expires;
+    updateSpotifyUI(true);
+    startPolling();
+    log('Spotify-Session wiederhergestellt', 'g');
+  } else if (refreshToken) {
+    if (await refreshAccessToken()) {
+      updateSpotifyUI(true);
+      startPolling();
+      log('Spotify-Token erneuert', 'g');
+    }
+  } else {
+    log('Bitte mit Spotify einloggen');
+  }
+
+  log('Song Quiz bereit');
+})();
 </script>
 </body>
 </html>
