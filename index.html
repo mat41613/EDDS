@@ -96,6 +96,14 @@
     /* ── Spieler-Grid ── */
     .pbadge.locked { opacity: .35; text-decoration: line-through; }
 
+    /* ── Gerätewähler ── */
+    #device-section { margin: 8px 0 4px; }
+    #device-list { display: flex; flex-direction: column; gap: 4px; }
+    .device-item { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 1.5px solid transparent; font-size: .88rem; transition: background .12s, border-color .12s; }
+    .device-item:hover { background: var(--border); }
+    .device-item.selected { border-color: #1DB954; background: rgba(29,185,84,.08); }
+    .device-active-badge { color: #1DB954; font-size: .72rem; margin-left: auto; flex-shrink: 0; }
+
     /* ── Virtuelle Buzzer ── */
     #dev-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .vbuzz { padding: 18px 8px; font-size: 1rem; font-weight: 700; border-radius: 12px; letter-spacing: .04em; }
@@ -142,6 +150,13 @@
     <div class="status-row">
       <div class="dot" id="sp-dot"></div>
       <span id="sp-label">Nicht eingeloggt</span>
+    </div>
+    <div id="device-section" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 5px">
+        <span style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Abspielgerät</span>
+        <button class="btn-outline" style="padding:3px 10px;font-size:.78rem" onclick="loadDevices()">↻ aktualisieren</button>
+      </div>
+      <div id="device-list"></div>
     </div>
     <div id="spotify-now" style="display:none">
       <img id="spotify-art" src="" alt="" />
@@ -247,6 +262,7 @@ let currentDuration = 0;
 let currentBuzzPlayer = 0;
 let scores = [0, 0, 0, 0, 0];   // index 0 unused
 let lockedPlayers = new Set();
+let selectedDeviceId = null;
 
 // ══════════════════════════════════════════════
 //  LOG
@@ -382,32 +398,106 @@ async function spotifyCall(method, path, body) {
   const res = await fetch('https://api.spotify.com/v1' + path, opts);
   if (res.status === 401) { await refreshAccessToken(); return null; }
   if (res.status === 204 || res.status === 202) return {};
+  if (res.status === 404) {
+    try {
+      const err = await res.json();
+      if (err?.error?.reason === 'NO_ACTIVE_DEVICE') {
+        log('Kein aktives Geraet – bitte Geraet auswaehlen!', 'y');
+        loadDevices();
+      }
+    } catch {}
+    return null;
+  }
   if (!res.ok) return null;
   try { return await res.json(); } catch { return {}; }
 }
 
+// Hängt ?device_id= an, wenn ein Gerät gewählt ist
+function dq(extra) {
+  const p = selectedDeviceId ? `device_id=${selectedDeviceId}` : '';
+  if (!p && !extra) return '';
+  if (!p) return `?${extra}`;
+  if (!extra) return `?${p}`;
+  return `?${p}&${extra}`;
+}
+
 async function pauseSpotify() {
-  const result = await spotifyCall('PUT', '/me/player/pause');
+  const result = await spotifyCall('PUT', `/me/player/pause${dq()}`);
   if (result !== null) log('Spotify: pausiert', 'g');
-  else log('Spotify pause fehlgeschlagen (kein aktives Geraet?)', 'y');
 }
 
 async function resumeSpotify() {
-  const result = await spotifyCall('PUT', '/me/player/play');
+  const result = await spotifyCall('PUT', `/me/player/play${dq()}`);
   if (result !== null) log('Spotify: fortgesetzt', 'g');
 }
 
 async function spotifyNext() {
-  const result = await spotifyCall('POST', '/me/player/next');
+  const result = await spotifyCall('POST', `/me/player/next${dq()}`);
   if (result !== null) log('Spotify: naechster Song', 'g');
-  else log('Spotify next fehlgeschlagen (kein aktives Geraet?)', 'y');
 }
 
 async function seekSpotify(e) {
   if (!currentDuration) return;
   const rect = e.currentTarget.getBoundingClientRect();
   const ms   = Math.round(((e.clientX - rect.left) / rect.width) * currentDuration);
-  await spotifyCall('PUT', `/me/player/seek?position_ms=${ms}`);
+  await spotifyCall('PUT', `/me/player/seek${dq(`position_ms=${ms}`)}`);
+}
+
+// ══════════════════════════════════════════════
+//  SPOTIFY – GERÄTEWÄHLER
+// ══════════════════════════════════════════════
+async function loadDevices() {
+  const section = document.getElementById('device-section');
+  const list    = document.getElementById('device-list');
+  section.style.display = 'block';
+  list.innerHTML = '<span style="color:var(--muted);font-size:.82rem">Lade…</span>';
+
+  const data = await spotifyCall('GET', '/me/player/devices');
+  if (!data || !data.devices) {
+    list.innerHTML = '<span style="color:var(--muted);font-size:.82rem">Fehler beim Laden der Geraete.</span>';
+    return;
+  }
+
+  const devices = data.devices;
+  if (!devices.length) {
+    list.innerHTML = '<span style="color:var(--muted);font-size:.82rem">Kein Geraet gefunden – oeffne Spotify auf einem Geraet.</span>';
+    return;
+  }
+
+  // Auto-Auswahl: aktives Gerät oder erstes
+  if (!selectedDeviceId) {
+    const active = devices.find(d => d.is_active) || devices[0];
+    selectedDeviceId = active.id;
+    log(`Geraet: ${active.name}`, 'g');
+  }
+
+  list.innerHTML = devices.map(d => {
+    const icon = deviceTypeIcon(d.type);
+    const sel  = d.id === selectedDeviceId ? 'selected' : '';
+    return `<div class="device-item ${sel}" onclick="selectDevice('${esc(d.id)}','${esc(d.name)}')">
+      <span>${icon}</span>
+      <span>${esc(d.name)}</span>
+      ${d.is_active ? '<span class="device-active-badge">▶ aktiv</span>' : ''}
+    </div>`;
+  }).join('');
+}
+
+async function selectDevice(id, name) {
+  selectedDeviceId = id;
+  // Wiedergabe auf dieses Gerät übertragen (ohne Auto-Play)
+  await spotifyCall('PUT', '/me/player', { device_ids: [id], play: false });
+  log(`Geraet gewaehlt: ${name}`, 'g');
+  await loadDevices(); // Liste auffrischen
+}
+
+function deviceTypeIcon(type) {
+  const t = (type || '').toLowerCase();
+  if (t === 'computer')   return '💻';
+  if (t === 'smartphone') return '📱';
+  if (t === 'speaker')    return '🔊';
+  if (t === 'tablet')     return '📱';
+  if (t === 'tv')         return '📺';
+  return '🎵';
 }
 
 // ══════════════════════════════════════════════
@@ -530,6 +620,11 @@ async function sendByte(b) {
 //  SPIELLOGIK
 // ══════════════════════════════════════════════
 async function startRound() {
+  if (!selectedDeviceId) {
+    log('Kein Spotify-Geraet gewaehlt – bitte zuerst Geraet auswaehlen!', 'y');
+    await loadDevices();
+    if (!selectedDeviceId) return;
+  }
   lockedPlayers.clear();
   resetBadges();
   updateRound();
@@ -707,7 +802,7 @@ function renderTracks(tracks) {
 async function playTrackByIndex(i) {
   const t = currentTrackList[i];
   if (!t) return;
-  const result = await spotifyCall('PUT', '/me/player/play', { uris: [t.uri] });
+  const result = await spotifyCall('PUT', `/me/player/play${dq()}`, { uris: [t.uri] });
   if (result !== null) {
     // Aktiven Track hervorheben
     document.querySelectorAll('.track-item').forEach(el => el.classList.remove('playing'));
@@ -732,6 +827,11 @@ function updateSpotifyUI(loggedIn) {
   document.getElementById('sp-label').textContent    = loggedIn ? 'Eingeloggt' : 'Nicht eingeloggt';
   document.getElementById('btn-sp-login').style.display  = loggedIn ? 'none'  : '';
   document.getElementById('btn-sp-logout').style.display = loggedIn ? ''      : 'none';
+  if (loggedIn) loadDevices();
+  else {
+    selectedDeviceId = null;
+    document.getElementById('device-section').style.display = 'none';
+  }
 }
 
 // ══════════════════════════════════════════════
