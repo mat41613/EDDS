@@ -511,7 +511,7 @@ async function fetchNowPlaying() {
   if (!data || !data.item) { resetNowPlaying(); return; }
 
   const track   = data.item;
-  const art     = track.album.images[2]?.url || track.album.images[0]?.url || '';
+  const art     = track.album.images[0]?.url || '';
   const name    = track.name;
   const artists = track.artists.map(a=>a.name).join(', ');
 
@@ -773,7 +773,7 @@ function renderTracks(tracks) {
     return;
   }
   list.innerHTML = tracks.map((t, i) => {
-    const art    = t.album?.images?.[2]?.url || t.album?.images?.[0]?.url || '';
+    const art    = t.album?.images?.[1]?.url || t.album?.images?.[0]?.url || '';
     const name   = esc(t.name);
     const artist = esc(t.artists.map(a => a.name).join(', '));
     return `<div class="track-item" id="ti-${i}" onclick="playTrackByIndex(${i})">
