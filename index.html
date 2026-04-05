@@ -96,6 +96,23 @@
     /* ── Spieler-Grid ── */
     .pbadge.locked { opacity: .35; text-decoration: line-through; }
 
+    /* ── Virtuelle Buzzer ── */
+    #dev-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .vbuzz { padding: 18px 8px; font-size: 1rem; font-weight: 700; border-radius: 12px; letter-spacing: .04em; }
+
+    /* ── Bibliothek ── */
+    #lib-search-row { display: flex; gap: 8px; margin-bottom: 10px; }
+    #lib-search { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--text); font-size: .9rem; }
+    #lib-search:focus { outline: none; border-color: #1DB954; }
+    #track-list { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+    .track-item { display: flex; align-items: center; gap: 10px; padding: 7px 6px; border-radius: 8px; cursor: pointer; transition: background .12s; }
+    .track-item:hover, .track-item:active { background: var(--border); }
+    .track-art { width: 38px; height: 38px; border-radius: 4px; object-fit: cover; background: var(--border); flex-shrink: 0; }
+    .track-info { overflow: hidden; min-width: 0; }
+    .track-name { font-size: .88rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .track-artist { font-size: .75rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .track-item.playing .track-name { color: #1DB954; }
+
     /* ── Log ── */
     #log-box { max-height: 120px; overflow-y: auto; font-size: .72rem; color: var(--muted); font-family: "SF Mono", monospace; line-height: 1.6; }
     .le { padding: 1px 0; }
@@ -170,6 +187,27 @@
       <div class="pbadge" id="p3" style="border-color:var(--p3)">Spieler 3</div>
       <div class="pbadge" id="p4" style="border-color:var(--p4)">Spieler 4</div>
     </div>
+  </div>
+
+  <!-- ── Virtuelle Buzzer (Dev) ── -->
+  <div class="card">
+    <div class="card-title">Virtuelle Buzzer (Dev-Modus)</div>
+    <div id="dev-grid">
+      <button class="vbuzz" style="background:var(--p1);color:var(--p1t)" onclick="virtualBuzz(1)">● Spieler 1</button>
+      <button class="vbuzz" style="background:var(--p2);color:var(--p2t)" onclick="virtualBuzz(2)">● Spieler 2</button>
+      <button class="vbuzz" style="background:var(--p3);color:var(--p3t)" onclick="virtualBuzz(3)">● Spieler 3</button>
+      <button class="vbuzz" style="background:var(--p4);color:var(--p4t)" onclick="virtualBuzz(4)">● Spieler 4</button>
+    </div>
+  </div>
+
+  <!-- ── Bibliothek ── -->
+  <div class="card">
+    <div class="card-title">Spotify Bibliothek</div>
+    <div id="lib-search-row">
+      <input id="lib-search" type="search" placeholder="Song suchen…" oninput="onLibSearch(this.value)" />
+      <button class="btn-spotify" onclick="loadLikedSongs()">♥ Liked</button>
+    </div>
+    <div id="track-list"><span style="color:var(--muted);font-size:.82rem">Songs laden oder suchen…</span></div>
   </div>
 
   <!-- ── Log ── -->
@@ -601,6 +639,83 @@ function updateScoreBadges() {
     if(!b.classList.contains('active') && !b.classList.contains('locked')) {
       b.textContent = `Spieler ${i} (${scores[i]} Pkt)`;
     }
+  }
+}
+
+// ══════════════════════════════════════════════
+//  VIRTUELLE BUZZER (DEV)
+// ══════════════════════════════════════════════
+function virtualBuzz(player) {
+  handleBuzz(player, currentRound);
+  log(`[DEV] Buzz: Spieler ${player}`, 'y');
+}
+
+// ══════════════════════════════════════════════
+//  BIBLIOTHEK
+// ══════════════════════════════════════════════
+let libSearchTimer = null;
+let currentTrackList = [];
+
+function onLibSearch(val) {
+  clearTimeout(libSearchTimer);
+  if (val.trim().length < 2) return;
+  libSearchTimer = setTimeout(() => searchTracks(val.trim()), 400);
+}
+
+async function loadLikedSongs() {
+  document.getElementById('track-list').innerHTML =
+    '<span style="color:var(--muted);font-size:.82rem">Lade…</span>';
+  const data = await spotifyCall('GET', '/me/tracks?limit=50&market=DE');
+  if (!data || !data.items) { log('Liked Songs nicht geladen', 'y'); return; }
+  renderTracks(data.items.map(i => i.track));
+}
+
+async function searchTracks(q) {
+  const data = await spotifyCall('GET',
+    `/search?q=${encodeURIComponent(q)}&type=track&limit=30&market=DE`);
+  if (!data || !data.tracks) { log('Suche fehlgeschlagen', 'y'); return; }
+  renderTracks(data.tracks.items);
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderTracks(tracks) {
+  currentTrackList = tracks;
+  const list = document.getElementById('track-list');
+  if (!tracks || !tracks.length) {
+    list.innerHTML = '<span style="color:var(--muted);font-size:.82rem">Keine Songs gefunden.</span>';
+    return;
+  }
+  list.innerHTML = tracks.map((t, i) => {
+    const art    = t.album?.images?.[2]?.url || t.album?.images?.[0]?.url || '';
+    const name   = esc(t.name);
+    const artist = esc(t.artists.map(a => a.name).join(', '));
+    return `<div class="track-item" id="ti-${i}" onclick="playTrackByIndex(${i})">
+      <img class="track-art" src="${esc(art)}" alt="" loading="lazy" />
+      <div class="track-info">
+        <div class="track-name">${name}</div>
+        <div class="track-artist">${artist}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function playTrackByIndex(i) {
+  const t = currentTrackList[i];
+  if (!t) return;
+  const result = await spotifyCall('PUT', '/me/player/play', { uris: [t.uri] });
+  if (result !== null) {
+    // Aktiven Track hervorheben
+    document.querySelectorAll('.track-item').forEach(el => el.classList.remove('playing'));
+    document.getElementById(`ti-${i}`)?.classList.add('playing');
+    log(`▶ ${t.name} – ${t.artists.map(a => a.name).join(', ')}`, 'g');
+    setTimeout(fetchNowPlaying, 1200);
+  } else {
+    log('Song abspielen fehlgeschlagen (kein aktives Geraet?)', 'y');
   }
 }
 
