@@ -29,7 +29,32 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    #app { display: flex; flex-direction: column; gap: 12px; padding: 16px; max-width: 480px; margin: 0 auto; }
+    #app { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 16px; max-width: 540px; margin: 0 auto; }
+
+    /* ── Responsive: Desktop ab 700 px ── */
+    @media (min-width: 700px) {
+      #app {
+        max-width: 980px;
+        grid-template-columns: 1fr 1fr;
+        grid-template-areas:
+          "title      title"
+          "spotify    controls"
+          "spotify    players"
+          "scores     scores"
+          "dev        connections"
+          "log        log";
+        align-items: start;
+      }
+      #app-title        { grid-area: title; }
+      #card-spotify     { grid-area: spotify; }
+      #card-controls    { grid-area: controls; }
+      #card-players     { grid-area: players; }
+      #card-scores      { grid-area: scores; }
+      #card-dev         { grid-area: dev; }
+      #card-connections { grid-area: connections; }
+      #card-log         { grid-area: log; }
+      #spotify-art { width: clamp(180px, 38%, 280px) !important; height: clamp(180px, 38%, 280px) !important; }
+    }
 
     h1 { text-align: center; font-size: 1.6rem; font-weight: 700; color: var(--yellow); letter-spacing: .08em; padding: 8px 0 4px; }
 
@@ -115,10 +140,17 @@
     #dev-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .vbuzz { padding: 18px 8px; font-size: 1rem; font-weight: 700; border-radius: 12px; letter-spacing: .04em; }
 
-    /* ── Bibliothek ── */
-    #lib-search-row { display: flex; gap: 8px; margin-bottom: 10px; }
-    #lib-search { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--text); font-size: .9rem; }
-    #lib-search:focus { outline: none; border-color: #1DB954; }
+    /* ── Scoreboard ── */
+    #scoreboard { display: flex; flex-direction: column; gap: 4px; }
+    .score-row { display: flex; align-items: center; gap: 12px; padding: 7px 4px; }
+    .score-medal { font-size: 1.5rem; width: 2rem; text-align: center; flex-shrink: 0; line-height: 1; }
+    .score-player { flex: 1; min-width: 0; }
+    .score-name { font-size: .9rem; font-weight: 700; color: var(--pc, var(--text)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .score-bar-wrap { height: 7px; background: var(--border); border-radius: 4px; margin-top: 5px; overflow: hidden; }
+    .score-bar { height: 100%; border-radius: 4px; background: var(--pc, var(--muted)); min-width: 3px; transition: width .55s cubic-bezier(.4,0,.2,1); }
+    .score-num { font-size: 2.2rem; font-weight: 900; color: var(--pc, var(--text)); width: 3.2rem; text-align: right; flex-shrink: 0; line-height: 1; }
+
+    /* ── Track-Liste (Bibliothek) ── */
     #track-list { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
     .track-item { display: flex; align-items: center; gap: 10px; padding: 7px 6px; border-radius: 8px; cursor: pointer; transition: background .12s; }
     .track-item:hover, .track-item:active { background: var(--border); }
@@ -149,10 +181,10 @@
 </div>
 
 <div id="app">
-  <h1>🎵 Song Quiz</h1>
+  <h1 id="app-title">🎵 Song Quiz</h1>
 
   <!-- ── Spotify ── -->
-  <div class="card">
+  <div class="card" id="card-spotify">
     <div class="card-title">Spotify</div>
     <div class="status-row">
       <div class="dot" id="sp-dot"></div>
@@ -170,20 +202,24 @@
       </div>
     </div>
     <div id="sp-blur-hint">🔒 Titel verborgen – wird nach richtigem Buzzer aufgedeckt</div>
-    <div class="btn-row" style="margin-top:10px">
-      <button class="btn-spotify" id="btn-sp-login"  onclick="spotifyLogin()">🎵 Mit Spotify einloggen</button>
-      <button class="btn-outline" id="btn-sp-logout" onclick="spotifyLogout()" style="display:none">Ausloggen</button>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn-spotify" id="btn-sp-login" onclick="spotifyLogin()">🎵 Mit Spotify einloggen</button>
     </div>
   </div>
 
-  <!-- ── Steuerung ── -->
-  <div class="card">
+  <!-- ── Spielsteuerung ── -->
+  <div class="card" id="card-controls">
     <div class="card-title">Spielsteuerung</div>
     <div id="round-num">Runde 1</div>
     <div class="btn-row">
-      <button class="btn-yellow" id="btn-start" onclick="startRound()" disabled>▶ Runde starten</button>
-      <button class="btn-red"    id="btn-reset" onclick="resetRound()" disabled>↺ Reset</button>
+      <button class="btn-yellow" id="btn-start" onclick="startRound()" disabled>▶ Neue Runde</button>
+      <button class="btn-green"  id="btn-reset" onclick="resetRound()" disabled>🎵 Auflösung</button>
     </div>
+  </div>
+
+  <!-- ── Spielerstatus ── -->
+  <div class="card" id="card-players">
+    <div class="card-title">Spielerstatus</div>
     <div id="player-grid">
       <div class="pbadge" id="p1" style="border-color:var(--p1)">Spieler 1</div>
       <div class="pbadge" id="p2" style="border-color:var(--p2)">Spieler 2</div>
@@ -192,8 +228,14 @@
     </div>
   </div>
 
+  <!-- ── Punktestand ── -->
+  <div class="card" id="card-scores">
+    <div class="card-title">Punktestand</div>
+    <div id="scoreboard"></div>
+  </div>
+
   <!-- ── Virtuelle Buzzer (Dev) ── -->
-  <div class="card">
+  <div class="card" id="card-dev">
     <div class="card-title">Virtuelle Buzzer (Dev-Modus)</div>
     <div id="dev-grid">
       <button class="vbuzz" style="background:var(--p1);color:var(--p1t)" onclick="virtualBuzz(1)">● Spieler 1</button>
@@ -203,8 +245,8 @@
     </div>
   </div>
 
-  <!-- ── Verbindungen (BLE + Spotify-Gerät) ── -->
-  <div class="card">
+  <!-- ── Verbindungen (BLE + Spotify-Gerät + Logout) ── -->
+  <div class="card" id="card-connections">
     <div class="card-title">BuzzQuiz Board</div>
     <div class="status-row">
       <div class="dot" id="ble-dot"></div>
@@ -220,11 +262,14 @@
         <button class="btn-outline" style="padding:3px 10px;font-size:.78rem" onclick="loadDevices()">↻</button>
       </div>
       <div id="device-list"></div>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn-outline" id="btn-sp-logout" onclick="spotifyLogout()" style="display:none">Spotify Ausloggen</button>
+      </div>
     </div>
   </div>
 
   <!-- ── Log ── -->
-  <div class="card">
+  <div class="card" id="card-log">
     <div class="card-title">Log</div>
     <div id="log-box"></div>
   </div>
@@ -639,6 +684,7 @@ function resetRound() {
   updateRound();
   resetBadges();
   setSpotifyBlur(false);
+  renderScoreboard();
   log(`→ RESET → Runde ${currentRound}`);
 }
 
@@ -680,7 +726,8 @@ async function onRichtig() {
   }
   // Song weiterlaufen lassen
   await resumeSpotify();
-  // Badges aktualisieren (Runde noch nicht wechseln – Moderator sieht Ergebnis)
+  // Scoreboard & Badges aktualisieren (Runde noch nicht wechseln – Moderator sieht Ergebnis)
+  renderScoreboard();
   updateScoreBadges();
 }
 
@@ -724,7 +771,7 @@ function resetBadges() {
     b.classList.remove('active', 'locked');
     b.style.background = 'var(--border)';
     b.style.color      = 'var(--muted)';
-    b.textContent      = `Spieler ${i} (${scores[i]} Pkt)`;
+    b.textContent      = `Spieler ${i}`;
   }
 }
 
@@ -733,9 +780,41 @@ function updateScoreBadges() {
     const b = document.getElementById(`p${i}`);
     if(!b) continue;
     if(!b.classList.contains('active') && !b.classList.contains('locked')) {
-      b.textContent = `Spieler ${i} (${scores[i]} Pkt)`;
+      b.textContent = `Spieler ${i}`;
     }
   }
+  renderScoreboard();
+}
+
+function renderScoreboard() {
+  const board = document.getElementById('scoreboard');
+  if (!board) return;
+
+  const players = [1,2,3,4].map(i => ({
+    id: i, score: scores[i], color: P_COLORS[i]
+  }));
+  players.sort((a, b) => b.score - a.score || a.id - b.id);
+
+  const maxScore = Math.max(...players.map(p => p.score), 1);
+  const MEDALS = ['🥇','🥈','🥉','🎖️'];
+
+  // Gleichstand: gleicher Rang bei gleichem Score
+  let rank = 0;
+  board.innerHTML = players.map((p, i) => {
+    if (i === 0 || p.score !== players[i-1].score) rank = i;
+    const medal  = p.score > 0 ? (MEDALS[rank] ?? `${rank+1}.`) : `${i+1}.`;
+    const pct    = Math.round((p.score / maxScore) * 100);
+    return `<div class="score-row" style="--pc:${p.color}">
+      <div class="score-medal">${medal}</div>
+      <div class="score-player">
+        <div class="score-name">Spieler ${p.id}</div>
+        <div class="score-bar-wrap">
+          <div class="score-bar" style="width:${pct}%"></div>
+        </div>
+      </div>
+      <div class="score-num">${p.score}</div>
+    </div>`;
+  }).join('');
 }
 
 // ══════════════════════════════════════════════
@@ -857,6 +936,7 @@ function updateSpotifyUI(loggedIn) {
     log('Bitte mit Spotify einloggen');
   }
 
+  renderScoreboard();
   log('Song Quiz bereit');
 })();
 </script>
