@@ -82,13 +82,19 @@
     #buzz-overlay {
       display: none; position: fixed; inset: 0; z-index: 100;
       background: rgba(0,0,0,.93); flex-direction: column;
-      align-items: center; justify-content: center; gap: 12px; cursor: pointer;
+      align-items: center; justify-content: center; gap: 12px;
     }
     #buzz-overlay.show { display: flex; }
     #buzz-big   { font-size: clamp(3rem,14vw,5rem); font-weight: 900; letter-spacing: .04em; text-align: center; line-height: 1.05; }
     #buzz-sub   { font-size: 1.4rem; color: var(--text); opacity: .85; }
     #buzz-rnd   { font-size: .9rem; color: var(--muted); }
-    #buzz-btn   { margin-top: 20px; padding: 14px 40px; background: rgba(255,255,255,.1); border: 1.5px solid rgba(255,255,255,.2); border-radius: 12px; color: var(--text); font-size: 1rem; font-weight: 600; }
+    #buzz-actions { display: flex; gap: 16px; margin-top: 20px; }
+    #buzz-actions button { min-width: 130px; padding: 15px 24px; font-size: 1.1rem; border-radius: 14px; }
+    .btn-richtig { background: var(--green); color: #000; }
+    .btn-falsch  { background: var(--red);   color: #fff; }
+
+    /* ── Spieler-Grid ── */
+    .pbadge.locked { opacity: .35; text-decoration: line-through; }
 
     /* ── Log ── */
     #log-box { max-height: 120px; overflow-y: auto; font-size: .72rem; color: var(--muted); font-family: "SF Mono", monospace; line-height: 1.6; }
@@ -100,11 +106,14 @@
 </head>
 <body>
 <!-- Buzz Overlay -->
-<div id="buzz-overlay" onclick="dismissBuzz()">
+<div id="buzz-overlay">
   <div id="buzz-big">SPIELER ?</div>
   <div id="buzz-sub">hat gebuzzert!</div>
   <div id="buzz-rnd">Runde 1</div>
-  <button id="buzz-btn" onclick="dismissBuzz()">Weiter → nächste Runde</button>
+  <div id="buzz-actions">
+    <button class="btn-richtig" onclick="onRichtig()">✓ Richtig</button>
+    <button class="btn-falsch"  onclick="onFalsch()">✗ Falsch</button>
+  </div>
 </div>
 
 <div id="app">
@@ -197,6 +206,9 @@ let currentRound = 1;
 let progressTimer = null;
 let currentProgress = 0;
 let currentDuration = 0;
+let currentBuzzPlayer = 0;
+let scores = [0, 0, 0, 0, 0];   // index 0 unused
+let lockedPlayers = new Set();
 
 // ══════════════════════════════════════════════
 //  LOG
@@ -342,6 +354,17 @@ async function pauseSpotify() {
   else log('Spotify pause fehlgeschlagen (kein aktives Geraet?)', 'y');
 }
 
+async function resumeSpotify() {
+  const result = await spotifyCall('PUT', '/me/player/play');
+  if (result !== null) log('Spotify: fortgesetzt', 'g');
+}
+
+async function spotifyNext() {
+  const result = await spotifyCall('POST', '/me/player/next');
+  if (result !== null) log('Spotify: naechster Song', 'g');
+  else log('Spotify next fehlgeschlagen (kein aktives Geraet?)', 'y');
+}
+
 async function seekSpotify(e) {
   if (!currentDuration) return;
   const rect = e.currentTarget.getBoundingClientRect();
@@ -468,9 +491,11 @@ async function sendByte(b) {
 // ══════════════════════════════════════════════
 //  SPIELLOGIK
 // ══════════════════════════════════════════════
-function startRound() {
+async function startRound() {
+  lockedPlayers.clear();
   resetBadges();
   updateRound();
+  await spotifyNext();
   sendByte(0x53); // 'S'
   log(`→ START Runde ${currentRound}`, 'g');
 }
@@ -478,6 +503,7 @@ function startRound() {
 function resetRound() {
   sendByte(0x52); // 'R'
   currentRound++;
+  lockedPlayers.clear();
   updateRound();
   resetBadges();
   log(`→ RESET → Runde ${currentRound}`);
@@ -485,19 +511,19 @@ function resetRound() {
 
 async function handleBuzz(player, round) {
   currentRound = round;
+  currentBuzzPlayer = player;
 
   // 1. Spotify sofort pausieren
   await pauseSpotify();
   clearInterval(progressTimer);
 
   // 2. Spieler-Badge hervorheben
-  resetBadges();
   const badge = document.getElementById(`p${player}`);
   if (badge) {
     badge.style.background = P_COLORS[player] || '#fff';
     badge.style.color      = P_TEXT[player]   || '#000';
     badge.classList.add('active');
-    badge.textContent = `✓ Spieler ${player}`;
+    badge.textContent = `? Spieler ${player} (${scores[player]} Pkt)`;
   }
 
   // 3. Overlay
@@ -507,12 +533,50 @@ async function handleBuzz(player, round) {
   document.getElementById('buzz-rnd').textContent = `Runde ${round}`;
   document.getElementById('buzz-overlay').classList.add('show');
 
-  log(`🔔 Spieler ${player} – Runde ${round}`, 'b');
+  log(`Buzz: Spieler ${player} – Runde ${round}`, 'b');
 }
 
-function dismissBuzz() {
+async function onRichtig() {
   document.getElementById('buzz-overlay').classList.remove('show');
+  // Punkt gutschreiben
+  if (currentBuzzPlayer >= 1 && currentBuzzPlayer <= 4) {
+    scores[currentBuzzPlayer]++;
+    log(`+1 Punkt fuer Spieler ${currentBuzzPlayer} (jetzt ${scores[currentBuzzPlayer]} Pkt)`, 'g');
+  }
+  // Song weiterlaufen lassen
+  await resumeSpotify();
+  // Naechste Runde
   resetRound();
+  updateScoreBadges();
+}
+
+async function onFalsch() {
+  document.getElementById('buzz-overlay').classList.remove('show');
+  const player = currentBuzzPlayer;
+
+  // Spieler sperren: 2-Byte-Befehl 'L' + player_id
+  if (ctrlChr && player >= 1 && player <= 4) {
+    try {
+      await ctrlChr.writeValueWithoutResponse(new Uint8Array([0x4C, player]));
+      log(`→ LOCK Spieler ${player}`, 'y');
+    } catch(e) { log('BLE senden fehlgeschlagen: '+e.message,'y'); }
+  }
+
+  lockedPlayers.add(player);
+
+  // Badge als gesperrt markieren
+  const badge = document.getElementById(`p${player}`);
+  if (badge) {
+    badge.style.background = 'var(--border)';
+    badge.style.color      = 'var(--muted)';
+    badge.classList.remove('active');
+    badge.classList.add('locked');
+    badge.textContent = `✗ Spieler ${player} (${scores[player]} Pkt)`;
+  }
+
+  // Song weiter abspielen – andere koennen noch buzzen
+  await resumeSpotify();
+  log(`Spieler ${player} gesperrt – Runde laeuft weiter`, 'y');
 }
 
 function updateRound() {
@@ -523,10 +587,20 @@ function resetBadges() {
   for(let i=1;i<=4;i++) {
     const b = document.getElementById(`p${i}`);
     if(!b) continue;
-    b.classList.remove('active');
+    b.classList.remove('active', 'locked');
     b.style.background = 'var(--border)';
     b.style.color      = 'var(--muted)';
-    b.textContent      = `Spieler ${i}`;
+    b.textContent      = `Spieler ${i} (${scores[i]} Pkt)`;
+  }
+}
+
+function updateScoreBadges() {
+  for(let i=1;i<=4;i++) {
+    const b = document.getElementById(`p${i}`);
+    if(!b) continue;
+    if(!b.classList.contains('active') && !b.classList.contains('locked')) {
+      b.textContent = `Spieler ${i} (${scores[i]} Pkt)`;
+    }
   }
 }
 
