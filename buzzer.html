@@ -9,7 +9,7 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    :root { --tc: #40a0ff; --tt: #000; }
+    :root { --tc: #888; --tt: #fff; }
 
     html, body {
       height: 100%; width: 100%;
@@ -37,16 +37,13 @@
       background: #555; flex-shrink: 0;
       transition: background .3s;
     }
-    #status-dot.ok  { background: #00e050; }
-    #status-dot.err { background: #ff3030; }
-    #status-dot.spin {
-      background: #ffe000;
-      animation: blink .8s infinite;
-    }
+    #status-dot.ok   { background: #00e050; }
+    #status-dot.err  { background: #ff3030; }
+    #status-dot.spin { background: #ffe000; animation: blink .8s infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
     #status-text { color: #aaa; }
 
-    /* ── Teamname ──────────────────────────────────────── */
+    /* ── Spieler-/Teamname ─────────────────────────────── */
     #team-name {
       font-size: clamp(1.6rem, 7vw, 2.4rem);
       font-weight: 900;
@@ -119,29 +116,37 @@
     <span id="status-text">Verbinde…</span>
   </div>
 
-  <div id="team-name">TEAM ?</div>
-
+  <div id="team-name">…</div>
   <button id="buzz-btn" class="waiting" onclick="onBuzz()">BUZZ!</button>
-
   <div id="buzz-label">Warte auf Verbindung…</div>
 
-  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="https://unpkg.com/mqtt@4.3.8/dist/mqtt.min.js"></script>
   <script>
     // ── URL-Parameter ──────────────────────────────────────
-    const params   = new URLSearchParams(location.search);
-    const ROOM_ID  = params.get('room');
-    const PLAYER   = parseInt(params.get('player') || '1');
+    const params  = new URLSearchParams(location.search);
+    const ROOM_ID = params.get('room');
+    const PLAYER  = parseInt(params.get('player') || '1');
+    const MODE    = params.get('mode') || 'team';   // 'team' | 'single'
 
-    const TEAM_NAMES  = ['','Team Blau','Team Grün','Team Rot','Team Gelb'];
-    const TEAM_COLORS = ['','#40a0ff','#00e050','#ff3030','#ffe000'];
-    const TEXT_COLORS = ['','#000','#000','#fff','#000'];
+    // ── Team-Definitionen (8 Teams) ────────────────────────
+    const TEAM_NAMES  = ['','Team Blau','Team Grün','Team Rot','Team Gelb','Team Lila','Team Orange','Team Pink','Team Cyan'];
+    const TEAM_COLORS = ['','#40a0ff','#00e050','#ff3030','#ffe000','#b060ff','#ff8800','#ff40c0','#00d0d0'];
+    const TEXT_COLORS = ['','#000','#000','#fff','#000','#fff','#000','#000','#000'];
 
-    const teamName  = TEAM_NAMES[PLAYER]  || `Team ${PLAYER}`;
-    const teamColor = TEAM_COLORS[PLAYER] || '#40a0ff';
-    const textColor = TEXT_COLORS[PLAYER] || '#000';
+    // ── Darstellung je Modus ───────────────────────────────
+    let displayName, teamColor, textColor;
+    if (MODE === 'single') {
+      displayName = 'Einzelspieler';
+      teamColor   = '#cccccc';
+      textColor   = '#111';
+    } else {
+      displayName = TEAM_NAMES[PLAYER]  || `Spieler ${PLAYER}`;
+      teamColor   = TEAM_COLORS[PLAYER] || '#40a0ff';
+      textColor   = TEXT_COLORS[PLAYER] || '#000';
+    }
 
-    document.title = `${teamName} – BuzzQuiz`;
-    document.getElementById('team-name').textContent = teamName;
+    document.title = `${displayName} – BuzzQuiz`;
+    document.getElementById('team-name').textContent = displayName;
     document.documentElement.style.setProperty('--tc', teamColor);
     document.documentElement.style.setProperty('--tt', textColor);
 
@@ -151,9 +156,9 @@
     let canBuzz = false;
     let client  = null;
 
-    const MQTT_BROKER  = 'wss://broker.hivemq.com:8884/mqtt';
-    const TOPIC_CMD    = `buzzquiz/${ROOM_ID}/cmd`;
-    const TOPIC_BUZZ   = `buzzquiz/${ROOM_ID}/buzz`;
+    const MQTT_BROKER = 'wss://broker.hivemq.com:8884/mqtt';
+    const TOPIC_CMD   = `buzzquiz/${ROOM_ID}/cmd`;
+    const TOPIC_BUZZ  = `buzzquiz/${ROOM_ID}/buzz`;
 
     // ── UI-Helfer ─────────────────────────────────────────
     function setStatus(text, state) {
@@ -186,7 +191,7 @@
     }
 
     function publish(msg) {
-      if (client) client.publish(TOPIC_BUZZ, JSON.stringify(msg));
+      if (client) client.publish(TOPIC_BUZZ, JSON.stringify(msg), { qos: 0 });
     }
 
     // ── MQTT verbinden ────────────────────────────────────
@@ -199,37 +204,38 @@
       }
 
       const clientId = `bq_p${PLAYER}_` + Math.random().toString(36).slice(2, 8);
-      setStatus('Verbinde mit Moderator…', 'spin');
+      setStatus('Verbinde…', 'spin');
 
       client = mqtt.connect(MQTT_BROKER, {
         clientId,
-        clean: true,
-        connectTimeout: 10000,
+        clean:           true,
+        connectTimeout:  10000,
         reconnectPeriod: 4000,
+        protocolVersion: 4,   // MQTT 3.1.1
       });
 
+      // 'connect' feuert bei Verbindung UND bei jedem Reconnect
       client.on('connect', () => {
-        client.subscribe(TOPIC_CMD, err => {
+        // Bei jedem (Re-)Connect neu subscriben und Hello senden
+        client.subscribe(TOPIC_CMD, { qos: 0 }, err => {
           if (err) {
             setStatus('Subscribe fehlgeschlagen', 'err');
             return;
           }
-          setStatus(`Verbunden · ${teamName}`, 'ok');
-          // Hallo sagen damit Moderator die Verbindung sieht
+          setStatus(`Verbunden · ${displayName}`, 'ok');
           publish({ type: 'hello', player: PLAYER });
-          setWaiting();
+          // Beim Reconnect: Zustand beibehalten (nicht zwangsläufig auf Waiting)
+          if (!canBuzz && btn.className !== 'locked' && btn.className !== 'buzzed') {
+            setWaiting();
+          }
         });
-      });
-
-      client.on('reconnect', () => {
-        setStatus('Verbinde erneut…', 'spin');
       });
 
       client.on('message', (topic, payload) => {
         let msg;
         try { msg = JSON.parse(payload.toString()); } catch { return; }
 
-        // Nachrichten die nur an einen Spieler gerichtet sind filtern
+        // Gerichtete Nachrichten filtern (nur an diesen Spieler oder Broadcast)
         if (msg.target !== undefined && msg.target !== PLAYER) return;
 
         if      (msg.type === 'start') setReady();
@@ -237,22 +243,24 @@
         else if (msg.type === 'lock')  setLocked();
       });
 
-      client.on('error', e => {
-        setStatus(`Verbindungsfehler: ${e.message}`, 'err');
-        label.className   = 'err';
-        label.textContent = 'Seite neu laden um erneut zu verbinden.';
+      client.on('reconnect', () => {
+        setStatus('Verbinde erneut…', 'spin');
       });
 
       client.on('offline', () => {
         canBuzz = false;
-        setStatus('Verbindung getrennt', 'err');
+        setStatus('Keine Verbindung', 'err');
+      });
+
+      client.on('error', e => {
+        setStatus(`Fehler: ${e.message || e}`, 'err');
       });
     }
 
     // Beim Verlassen der Seite abmelden
     window.addEventListener('beforeunload', () => {
       if (client) {
-        publish({ type: 'bye', player: PLAYER });
+        try { client.publish(TOPIC_BUZZ, JSON.stringify({ type: 'bye', player: PLAYER }), { qos: 0 }); } catch {}
       }
     });
 

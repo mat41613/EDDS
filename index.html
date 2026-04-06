@@ -32,7 +32,11 @@
     #app { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 16px; max-width: 540px; margin: 0 auto; }
 
     /* ── Smartphone-Modus ── */
+    #sm-controls { display: flex; gap: 6px; margin-bottom: 8px; }
+    #sm-controls select { flex: 1; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 7px; padding: 5px 8px; font-size: .8rem; }
+    #sm-controls select:disabled { opacity: .4; }
     #qr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    #qr-grid.one-col { grid-template-columns: 1fr; max-width: 160px; margin-left: auto; margin-right: auto; }
     .qr-item  { display: flex; flex-direction: column; align-items: center; gap: 5px;
                 background: var(--bg); border-radius: 10px; padding: 10px 6px; }
     .qr-item img  { width: 110px; height: 110px; border-radius: 6px; display: block; }
@@ -48,7 +52,8 @@
     .btime-rank { font-size: 1.25rem; width: 30px; text-align: center; flex-shrink: 0; }
     .btime-info { flex: 1; min-width: 0; }
     .btime-team { font-weight: 700; font-size: .85rem; }
-    .btime-song { color: var(--muted); font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+    .btime-song { font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+    .btime-artist { color: var(--muted); font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
     .btime-ms   { font-weight: 800; font-size: 1rem; color: var(--green); white-space: nowrap; flex-shrink: 0; }
     .btime-empty { color: var(--muted); font-size: .85rem; text-align: center; padding: 10px 0; }
 
@@ -361,6 +366,22 @@
     <!-- ── Smartphone-Modus ── -->
     <div style="margin-top:14px; border-top:1px solid var(--border); padding-top:12px">
       <div class="card-title" style="margin-bottom:8px">📱 Smartphone-Modus</div>
+      <div id="sm-controls">
+        <select id="sm-mode" onchange="onSmModeChange()">
+          <option value="team">Team-Modus</option>
+          <option value="single">Einzelspieler</option>
+        </select>
+        <select id="sm-count">
+          <option value="1">1 Team</option>
+          <option value="2">2 Teams</option>
+          <option value="3">3 Teams</option>
+          <option value="4" selected>4 Teams</option>
+          <option value="5">5 Teams</option>
+          <option value="6">6 Teams</option>
+          <option value="7">7 Teams</option>
+          <option value="8">8 Teams</option>
+        </select>
+      </div>
       <button class="btn-outline" id="btn-phone-mode" onclick="activatePhoneMode()" style="width:100%">
         Aktivieren (kein Board nötig)
       </button>
@@ -390,9 +411,9 @@ const SVC_UUID     = '0000ff00-0000-1000-8000-00805f9b34fb';
 const NOTIFY_UUID  = '0000ff01-0000-1000-8000-00805f9b34fb';
 const CTRL_UUID    = '0000ff02-0000-1000-8000-00805f9b34fb';
 
-const P_COLORS     = ['','#40a0ff','#00e050','#ff3030','#ffe000'];
-const P_TEXT       = ['','#000',   '#000',   '#fff',   '#000'  ];
-const TEAM_NAMES   = ['','Team Blau','Team Grün','Team Rot','Team Gelb'];
+const P_COLORS   = ['','#40a0ff','#00e050','#ff3030','#ffe000','#b060ff','#ff8800','#ff40c0','#00d0d0'];
+const P_TEXT     = ['','#000',   '#000',   '#fff',   '#000',   '#fff',   '#000',   '#000',   '#000'  ];
+const TEAM_NAMES = ['','Team Blau','Team Grün','Team Rot','Team Gelb','Team Lila','Team Orange','Team Pink','Team Cyan'];
 
 // ══════════════════════════════════════════════
 //  STATE
@@ -415,8 +436,7 @@ let selectedDeviceId = null;
 let roundStartTime   = 0;   // Date.now() kurz nach Song-Start
 let firstBuzzPlayer  = 0;   // erster Spieler der Runde (0 = noch keiner)
 let pendingBuzzTime  = 0;   // ms von Song-Start bis zum ersten Buzz
-let pendingTrackName = '';  // Song-Titel zum Zeitpunkt des ersten Buzz
-let bestTimes        = [];  // [{team, color, song, time}] sortiert aufsteigend
+let bestTimes        = [];  // [{team, color, song, artist, time}] sortiert aufsteigend
 
 // ══════════════════════════════════════════════
 //  LOG
@@ -784,7 +804,6 @@ async function startRound() {
   lockedPlayers.clear();
   firstBuzzPlayer = 0;
   pendingBuzzTime = 0;
-  pendingTrackName = '';
   resetBadges();
   updateRound();
   setSpotifyBlur(true);
@@ -845,11 +864,10 @@ async function handleBuzz(player, round) {
   // currentRound wird von der Web-UI selbst gezählt – Basis-Wert ignorieren
   currentBuzzPlayer = player;
 
-  // Ersten Buzz der Runde erfassen (Zeitmessung für Bestzeiten-Liste)
+  // Ersten Buzz der Runde erfassen (Zeit messen; Titel erst bei "Richtig" lesen)
   if (firstBuzzPlayer === 0 && roundStartTime > 0) {
-    firstBuzzPlayer  = player;
-    pendingBuzzTime  = Date.now() - roundStartTime;
-    pendingTrackName = document.getElementById('spotify-track').textContent;
+    firstBuzzPlayer = player;
+    pendingBuzzTime = Date.now() - roundStartTime;
   }
 
   // 1. Spotify sofort pausieren
@@ -888,10 +906,16 @@ async function onRichtig() {
     if (badge) badge.textContent = `✓ ${TEAM_NAMES[winner]}`;
     log(`+1 Punkt fuer ${TEAM_NAMES[winner]} (jetzt ${scores[winner]} Pkt)`, 'g');
   }
-  // Bestzeit nur werten wenn dieser Spieler auch als Erster gebuzzert hat
-  if (winner === firstBuzzPlayer && pendingBuzzTime > 0 && pendingTrackName && pendingTrackName !== '—') {
-    saveBestTime(winner, pendingTrackName, pendingBuzzTime);
-    log(`⚡ Bestzeit: ${(pendingBuzzTime/1000).toFixed(1)}s – ${pendingTrackName}`, 'g');
+  // Bestzeit nur werten wenn dieser Spieler auch als Erster gebuzzert hat.
+  // Titel + Künstler erst JETZT aus dem DOM lesen – Spotify hat inzwischen
+  // sicher aktualisiert (Song läuft nach "Richtig" noch weiter).
+  if (winner === firstBuzzPlayer && pendingBuzzTime > 0) {
+    const trackName  = document.getElementById('spotify-track').textContent.trim();
+    const artistName = document.getElementById('spotify-artist').textContent.trim();
+    if (trackName && trackName !== '—') {
+      saveBestTime(winner, trackName, artistName, pendingBuzzTime);
+      log(`⚡ Bestzeit: ${(pendingBuzzTime/1000).toFixed(1)}s – ${trackName}`, 'g');
+    }
   }
   await resumeSpotify();
   smBroadcast({ type: 'reset' }); // Alle Smartphones zurücksetzen (Runde vorbei)
@@ -990,8 +1014,8 @@ function renderScoreboard() {
 //  BESTZEITEN
 // ══════════════════════════════════════════════
 
-function saveBestTime(teamId, trackName, timeMs) {
-  bestTimes.push({ team: TEAM_NAMES[teamId], color: P_COLORS[teamId], song: trackName, time: timeMs });
+function saveBestTime(teamId, trackName, artistName, timeMs) {
+  bestTimes.push({ team: TEAM_NAMES[teamId], color: P_COLORS[teamId], song: trackName, artist: artistName, time: timeMs });
   bestTimes.sort((a, b) => a.time - b.time);  // aufsteigend = schnellste zuerst
   renderBestTimes();
 }
@@ -1011,6 +1035,7 @@ function renderBestTimes() {
       <div class="btime-info">
         <div class="btime-team" style="color:${e.color}">${e.team}</div>
         <div class="btime-song">${e.song}</div>
+        <div class="btime-artist">${e.artist || ''}</div>
       </div>
       <div class="btime-ms">${(e.time / 1000).toFixed(1)}s</div>
     </div>`).join('');
@@ -1196,39 +1221,61 @@ function updateSpotifyUI(loggedIn) {
 //  SMARTPHONE-MODUS  (MQTT über WebSocket)
 // ══════════════════════════════════════════════
 
-let mqttClient  = null;
-let mqttRoomId  = null;
-let smOnline    = {};   // { playerId: bool }
+let mqttClient = null;
+let mqttRoomId = null;
+let smOnline   = {};   // { playerId: bool }
+let smMode     = 'team';
+let smCount    = 4;
+
 const MQTT_BROKER = 'wss://broker.hivemq.com:8884/mqtt';
+
+// Mode-Selektor: Team-Anzahl bei Einzelspieler ausblenden
+function onSmModeChange() {
+  const mode = document.getElementById('sm-mode').value;
+  document.getElementById('sm-count').disabled = (mode === 'single');
+}
 
 function activatePhoneMode() {
   if (mqttClient) return;
+
+  smMode  = document.getElementById('sm-mode').value;
+  smCount = smMode === 'single' ? 1 : parseInt(document.getElementById('sm-count').value);
+
   const btn = document.getElementById('btn-phone-mode');
   btn.disabled    = true;
   btn.textContent = '📱 Verbinde…';
+  document.getElementById('sm-mode').disabled  = true;
+  document.getElementById('sm-count').disabled = true;
 
   // Zufälligen 6-stelligen Raum-Code erzeugen
   mqttRoomId = Math.random().toString(36).slice(2, 8).toUpperCase();
 
-  const clientId = 'bq_mod_' + Math.random().toString(36).slice(2, 10);
+  const clientId  = 'bq_mod_' + Math.random().toString(36).slice(2, 10);
+  const buzzTopic = `buzzquiz/${mqttRoomId}/buzz`;
+  let panelShown  = false;
+
   mqttClient = mqtt.connect(MQTT_BROKER, {
     clientId,
-    clean: true,
-    connectTimeout: 10000,
+    clean:           true,
+    connectTimeout:  10000,
     reconnectPeriod: 3000,
+    protocolVersion: 4,   // MQTT 3.1.1 – am kompatibelsten
   });
 
+  // 'connect' feuert bei Verbindung UND bei Reconnect
   mqttClient.on('connect', () => {
-    mqttClient.subscribe(`buzzquiz/${mqttRoomId}/buzz`, err => {
-      if (err) {
-        log('📱 MQTT Subscribe fehlgeschlagen', 'y');
-        return;
+    mqttClient.subscribe(buzzTopic, { qos: 0 }, err => {
+      if (err) { log('📱 MQTT Subscribe fehlgeschlagen', 'y'); return; }
+      if (!panelShown) {
+        panelShown = true;
+        log('📱 Smartphone-Modus aktiv', 'g');
+        btn.textContent = '📱 Aktiv';
+        showPhonePanel(mqttRoomId);
+        document.getElementById('btn-start').disabled = false;
+        document.getElementById('btn-reset').disabled = false;
+      } else {
+        log('📱 MQTT neu verbunden', 'g');
       }
-      log('📱 Smartphone-Modus aktiv', 'g');
-      btn.textContent = '📱 Aktiv';
-      showPhonePanel(mqttRoomId);
-      document.getElementById('btn-start').disabled = false;
-      document.getElementById('btn-reset').disabled = false;
     });
   });
 
@@ -1236,34 +1283,36 @@ function activatePhoneMode() {
     let msg;
     try { msg = JSON.parse(payload.toString()); } catch { return; }
 
+    const pid  = msg.player;
+    const name = smMode === 'single' ? 'Spieler' : (TEAM_NAMES[pid] || `Spieler ${pid}`);
+
     if (msg.type === 'hello') {
-      const pid = msg.player;
       if (!smOnline[pid]) {
         smOnline[pid] = true;
         updatePhoneStatus(pid, true);
-        log(`📱 ${TEAM_NAMES[pid]} verbunden`, 'g');
+        log(`📱 ${name} verbunden`, 'g');
       }
     } else if (msg.type === 'buzz') {
-      handleBuzz(msg.player, currentRound);
+      handleBuzz(pid, currentRound);
     } else if (msg.type === 'bye') {
-      const pid = msg.player;
       smOnline[pid] = false;
       updatePhoneStatus(pid, false);
-      log(`📱 ${TEAM_NAMES[pid]} getrennt`, 'y');
+      log(`📱 ${name} getrennt`, 'y');
     }
   });
 
+  mqttClient.on('reconnect', () => {
+    log('📱 MQTT verbindet erneut…', 'y');
+  });
+
   mqttClient.on('error', e => {
-    log(`📱 MQTT Fehler: ${e.message}`, 'y');
-    btn.disabled    = false;
-    btn.textContent = 'Aktivieren (kein Board nötig)';
-    mqttClient = null;
+    log(`📱 MQTT Fehler: ${e.message || e}`, 'y');
   });
 }
 
 function smBroadcast(msg) {
   if (mqttClient && mqttRoomId) {
-    mqttClient.publish(`buzzquiz/${mqttRoomId}/cmd`, JSON.stringify(msg));
+    mqttClient.publish(`buzzquiz/${mqttRoomId}/cmd`, JSON.stringify(msg), { qos: 0 });
   }
 }
 
@@ -1272,22 +1321,34 @@ function smSendTo(playerId, msg) {
 }
 
 function showPhonePanel(roomId) {
-  const BASE = 'https://mat41613.github.io/EDDS/buzzer.html';
-  document.getElementById('phone-status').textContent = `🔗 Raum: ${roomId}`;
-  document.getElementById('qr-grid').innerHTML = [1,2,3,4].map(i => {
-    const url = `${BASE}?room=${encodeURIComponent(roomId)}&player=${i}`;
-    const qr  = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&qzone=2&data=${encodeURIComponent(url)}`;
+  const BASE    = 'https://mat41613.github.io/EDDS/buzzer.html';
+  const isSingle = smMode === 'single';
+  const count   = smCount;
+
+  document.getElementById('phone-status').textContent =
+    `🔗 Raum: ${roomId}  ·  ${isSingle ? 'Einzelspieler' : count + ' Teams'}`;
+
+  const grid = document.getElementById('qr-grid');
+  grid.className = (count === 1) ? 'one-col' : '';
+
+  const players = Array.from({ length: count }, (_, i) => i + 1);
+  grid.innerHTML = players.map(i => {
+    const url   = `${BASE}?room=${encodeURIComponent(roomId)}&player=${i}&mode=${smMode}`;
+    const qr    = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&qzone=2&data=${encodeURIComponent(url)}`;
+    const label = isSingle ? 'Einzelspieler' : (TEAM_NAMES[i] || `Spieler ${i}`);
+    const color = isSingle ? 'var(--fg)' : (P_COLORS[i] || '#fff');
     return `<div class="qr-item">
       <a href="${url}" target="_blank" rel="noopener">
-        <img src="${qr}" alt="QR ${TEAM_NAMES[i]}" loading="lazy">
+        <img src="${qr}" alt="QR ${label}" loading="lazy">
       </a>
-      <div class="qr-team" style="color:${P_COLORS[i]}">${TEAM_NAMES[i]}</div>
+      <div class="qr-team" style="color:${color}">${label}</div>
       <div class="qr-conn">
         <div class="qr-dot" id="qr-dot-${i}"></div>
         <span id="qr-lbl-${i}">Warte…</span>
       </div>
     </div>`;
   }).join('');
+
   document.getElementById('phone-panel').style.display = 'block';
 }
 
@@ -1299,6 +1360,6 @@ function updatePhoneStatus(playerId, connected) {
 }
 </script>
 
-<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script src="https://unpkg.com/mqtt@4.3.8/dist/mqtt.min.js"></script>
 </body>
 </html>
