@@ -67,7 +67,6 @@
       letter-spacing: .04em;
       color: var(--tt);
       background: #333;
-      /* 3-layer shadow: ambient + key + inset ridge */
       box-shadow:
         0 12px 40px rgba(0,0,0,.6),
         0  4px 12px rgba(0,0,0,.4),
@@ -126,7 +125,7 @@
 
   <div id="buzz-label">Warte auf Verbindung…</div>
 
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <script>
     // ── URL-Parameter ──────────────────────────────────────
     const params   = new URLSearchParams(location.search);
@@ -149,23 +148,12 @@
     const btn   = document.getElementById('buzz-btn');
     const label = document.getElementById('buzz-label');
 
-    let conn    = null;
     let canBuzz = false;
+    let client  = null;
 
-    // ── ICE-Config: STUN + TURN-Relay (für NAT-traversal) ─
-    const PEER_CFG = {
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302'  },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: ['turn:openrelay.metered.ca:80',
-                   'turn:openrelay.metered.ca:443',
-                   'turns:openrelay.metered.ca:443'],
-            username: 'openrelayproject', credential: 'openrelayproject' }
-        ]
-      }
-    };
+    const MQTT_BROKER  = 'wss://broker.hivemq.com:8884/mqtt';
+    const TOPIC_CMD    = `buzzquiz/${ROOM_ID}/cmd`;
+    const TOPIC_BUZZ   = `buzzquiz/${ROOM_ID}/buzz`;
 
     // ── UI-Helfer ─────────────────────────────────────────
     function setStatus(text, state) {
@@ -188,98 +176,87 @@
       canBuzz = false; btn.className = 'locked'; btn.textContent = '✗';
       label.className = 'err'; label.textContent = 'Gesperrt für diese Runde';
     }
-    function setError(msg) {
-      canBuzz = false;
-      setStatus('Verbindung fehlgeschlagen', 'err');
-      label.className   = 'err';
-      label.textContent = msg;
-    }
 
     // ── Buzz senden ───────────────────────────────────────
     function onBuzz() {
-      if (!canBuzz || !conn) return;
+      if (!canBuzz || !client) return;
       navigator.vibrate && navigator.vibrate([60, 30, 60]);
       setBuzzed();
-      conn.send({ type: 'buzz', player: PLAYER });
+      publish({ type: 'buzz', player: PLAYER });
     }
 
-    // ── Verbindungsaufbau mit Retry ───────────────────────
-    let retryCount = 0;
-    const MAX_RETRY = 4;
+    function publish(msg) {
+      if (client) client.publish(TOPIC_BUZZ, JSON.stringify(msg));
+    }
 
-    function connectToPeer() {
-      if (retryCount >= MAX_RETRY) {
-        setError('Keine Verbindung möglich.\nBitte QR-Code neu scannen.');
+    // ── MQTT verbinden ────────────────────────────────────
+    function connect() {
+      if (!ROOM_ID) {
+        setStatus('Kein Raum-Code – QR-Code neu scannen.', 'err');
+        label.className = 'err';
+        label.textContent = 'Kein Raum-Code gefunden.';
         return;
       }
-      retryCount++;
-      setStatus(
-        retryCount === 1 ? 'Verbinde mit Moderator…'
-                         : `Verbinde… (Versuch ${retryCount}/${MAX_RETRY})`,
-        'spin'
-      );
 
-      conn = peer.connect(ROOM_ID, { reliable: true });
+      const clientId = `bq_p${PLAYER}_` + Math.random().toString(36).slice(2, 8);
+      setStatus('Verbinde mit Moderator…', 'spin');
 
-      // Timeout: falls ICE-Negotiation hängt → retry
-      const iceTimeout = setTimeout(() => {
-        if (!conn.open) {
-          conn.close();
-          setStatus('Timeout – versuche erneut…', 'spin');
-          setTimeout(connectToPeer, 1500);
-        }
-      }, 9000);
-
-      conn.on('open', () => {
-        clearTimeout(iceTimeout);
-        retryCount = 0;
-        setStatus(`Verbunden · ${teamName}`, 'ok');
-        conn.send({ type: 'hello', player: PLAYER });
-        setWaiting();
+      client = mqtt.connect(MQTT_BROKER, {
+        clientId,
+        clean: true,
+        connectTimeout: 10000,
+        reconnectPeriod: 4000,
       });
 
-      conn.on('data', msg => {
+      client.on('connect', () => {
+        client.subscribe(TOPIC_CMD, err => {
+          if (err) {
+            setStatus('Subscribe fehlgeschlagen', 'err');
+            return;
+          }
+          setStatus(`Verbunden · ${teamName}`, 'ok');
+          // Hallo sagen damit Moderator die Verbindung sieht
+          publish({ type: 'hello', player: PLAYER });
+          setWaiting();
+        });
+      });
+
+      client.on('reconnect', () => {
+        setStatus('Verbinde erneut…', 'spin');
+      });
+
+      client.on('message', (topic, payload) => {
+        let msg;
+        try { msg = JSON.parse(payload.toString()); } catch { return; }
+
+        // Nachrichten die nur an einen Spieler gerichtet sind filtern
+        if (msg.target !== undefined && msg.target !== PLAYER) return;
+
         if      (msg.type === 'start') setReady();
         else if (msg.type === 'reset') setWaiting();
         else if (msg.type === 'lock')  setLocked();
       });
 
-      conn.on('close', () => {
-        canBuzz = false;
-        setStatus('Verbindung getrennt', 'err');
+      client.on('error', e => {
+        setStatus(`Verbindungsfehler: ${e.message}`, 'err');
         label.className   = 'err';
         label.textContent = 'Seite neu laden um erneut zu verbinden.';
       });
 
-      conn.on('error', () => {
-        clearTimeout(iceTimeout);
-        setTimeout(connectToPeer, 1500);
+      client.on('offline', () => {
+        canBuzz = false;
+        setStatus('Verbindung getrennt', 'err');
       });
     }
 
-    // ── PeerJS initialisieren ─────────────────────────────
-    if (!ROOM_ID) {
-      setError('Kein Raum-Code – QR-Code neu scannen.');
-    } else {
-      const peer = new Peer(undefined, PEER_CFG);
+    // Beim Verlassen der Seite abmelden
+    window.addEventListener('beforeunload', () => {
+      if (client) {
+        publish({ type: 'bye', player: PLAYER });
+      }
+    });
 
-      peer.on('open', () => connectToPeer());
-
-      peer.on('disconnected', () => {
-        setStatus('Verbindung unterbrochen…', 'spin');
-        peer.reconnect();
-      });
-
-      peer.on('error', e => {
-        // 'peer-unavailable': Moderator noch nicht bereit → retry
-        if (e.type === 'peer-unavailable') {
-          setTimeout(connectToPeer, 2000);
-        } else {
-          setError(`Fehler (${e.type}) – Seite neu laden.`);
-          console.error('PeerJS:', e);
-        }
-      });
-    }
+    connect();
   </script>
 </body>
 </html>
