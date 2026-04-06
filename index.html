@@ -103,6 +103,25 @@
     .pbadge { border-radius: 10px; padding: 8px; font-size: .82rem; font-weight: 600; text-align: center; background: var(--border); color: var(--muted); border: 2px solid transparent; transition: all .25s; }
     .pbadge.active { color: #000 !important; }
 
+    /* ── Countdown Overlay ── */
+    #countdown-overlay {
+      display: none; position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,.96);
+      align-items: center; justify-content: center;
+    }
+    #countdown-overlay.show { display: flex; }
+    #countdown-num {
+      font-size: clamp(8rem, 40vw, 16rem);
+      font-weight: 900; line-height: 1;
+    }
+    @keyframes cd-pop {
+      0%   { transform: scale(1.6); opacity: 0; }
+      20%  { transform: scale(1.0); opacity: 1; }
+      75%  { transform: scale(1.0); opacity: 1; }
+      100% { transform: scale(0.55); opacity: 0; }
+    }
+    .cd-pop { animation: cd-pop 0.95s ease forwards; }
+
     /* ── Buzz Overlay ── */
     #buzz-overlay {
       display: none; position: fixed; inset: 0; z-index: 100;
@@ -191,6 +210,11 @@
   </style>
 </head>
 <body>
+<!-- Countdown Overlay (3-2-1 vor jeder neuen Runde) -->
+<div id="countdown-overlay">
+  <div id="countdown-num">3</div>
+</div>
+
 <!-- Buzz Overlay -->
 <div id="buzz-overlay">
   <div id="buzz-big">TEAM ?</div>
@@ -710,9 +734,45 @@ async function startRound() {
   resetBadges();
   updateRound();
   setSpotifyBlur(true);
+
+  // 3-Sekunden Countdown – erst danach Song starten und Buzzer freigeben
+  await showCountdown();
+
   await spotifyNext();
-  sendByte(0x53); // 'S'
+  sendByte(0x53); // 'S' → START
   log(`→ START Runde ${currentRound}`, 'g');
+}
+
+function showCountdown() {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('countdown-overlay');
+    const numEl   = document.getElementById('countdown-num');
+    // 3 = weiß, 2 = gelb, 1 = rot  (passend zur alten Basis-Anzeige)
+    const COLORS  = { 3: 'var(--text)', 2: 'var(--yellow)', 1: 'var(--red)' };
+    let n = 3;
+
+    overlay.classList.add('show');
+
+    function tick() {
+      numEl.textContent = n;
+      numEl.style.color = COLORS[n];
+      // Animation neu starten (reflow erzwingt Reset)
+      numEl.classList.remove('cd-pop');
+      void numEl.offsetWidth;
+      numEl.classList.add('cd-pop');
+
+      if (--n > 0) {
+        setTimeout(tick, 1000);
+      } else {
+        // Nach "1": Overlay ausblenden, Promise auflösen
+        setTimeout(() => {
+          overlay.classList.remove('show');
+          resolve();
+        }, 950);
+      }
+    }
+    tick();
+  });
 }
 
 function resetRound() {
