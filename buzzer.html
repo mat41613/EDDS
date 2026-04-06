@@ -137,7 +137,6 @@
     const TEAM_COLORS = ['','#40a0ff','#00e050','#ff3030','#ffe000'];
     const TEXT_COLORS = ['','#000','#000','#fff','#000'];
 
-    // ── Team-Styling ───────────────────────────────────────
     const teamName  = TEAM_NAMES[PLAYER]  || `Team ${PLAYER}`;
     const teamColor = TEAM_COLORS[PLAYER] || '#40a0ff';
     const textColor = TEXT_COLORS[PLAYER] || '#000';
@@ -147,54 +146,56 @@
     document.documentElement.style.setProperty('--tc', teamColor);
     document.documentElement.style.setProperty('--tt', textColor);
 
-    // ── Widget-Refs ────────────────────────────────────────
     const btn   = document.getElementById('buzz-btn');
     const label = document.getElementById('buzz-label');
 
-    // ── Zustand ───────────────────────────────────────────
     let conn    = null;
     let canBuzz = false;
 
+    // ── ICE-Config: STUN + TURN-Relay (für NAT-traversal) ─
+    const PEER_CFG = {
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302'  },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: ['turn:openrelay.metered.ca:80',
+                   'turn:openrelay.metered.ca:443',
+                   'turns:openrelay.metered.ca:443'],
+            username: 'openrelayproject', credential: 'openrelayproject' }
+        ]
+      }
+    };
+
     // ── UI-Helfer ─────────────────────────────────────────
     function setStatus(text, state) {
-      // state: 'ok' | 'err' | 'spin' | ''
       document.getElementById('status-text').textContent = text;
       document.getElementById('status-dot').className    = state || '';
     }
-
     function setWaiting(msg) {
-      canBuzz = false;
-      btn.className    = 'waiting';
-      btn.textContent  = 'BUZZ!';
-      label.className  = '';
-      label.textContent = msg || 'Warte auf Rundenstart…';
+      canBuzz = false; btn.className = 'waiting'; btn.textContent = 'BUZZ!';
+      label.className = ''; label.textContent = msg || 'Warte auf Rundenstart…';
     }
-
     function setReady() {
-      canBuzz = true;
-      btn.className    = 'ready';
-      btn.textContent  = 'BUZZ!';
-      label.className  = 'active';
-      label.textContent = 'Drücke den Knopf!';
+      canBuzz = true; btn.className = 'ready'; btn.textContent = 'BUZZ!';
+      label.className = 'active'; label.textContent = 'Drücke den Knopf!';
     }
-
     function setBuzzed() {
-      canBuzz = false;
-      btn.className    = 'buzzed';
-      btn.textContent  = '●';
-      label.className  = 'active';
-      label.textContent = 'Gebuzzert!';
+      canBuzz = false; btn.className = 'buzzed'; btn.textContent = '●';
+      label.className = 'active'; label.textContent = 'Gebuzzert!';
     }
-
     function setLocked() {
+      canBuzz = false; btn.className = 'locked'; btn.textContent = '✗';
+      label.className = 'err'; label.textContent = 'Gesperrt für diese Runde';
+    }
+    function setError(msg) {
       canBuzz = false;
-      btn.className    = 'locked';
-      btn.textContent  = '✗';
-      label.className  = 'err';
-      label.textContent = 'Gesperrt für diese Runde';
+      setStatus('Verbindung fehlgeschlagen', 'err');
+      label.className   = 'err';
+      label.textContent = msg;
     }
 
-    // ── Buzz-Handler ───────────────────────────────────────
+    // ── Buzz senden ───────────────────────────────────────
     function onBuzz() {
       if (!canBuzz || !conn) return;
       navigator.vibrate && navigator.vibrate([60, 30, 60]);
@@ -202,52 +203,81 @@
       conn.send({ type: 'buzz', player: PLAYER });
     }
 
-    // ── PeerJS-Setup ───────────────────────────────────────
+    // ── Verbindungsaufbau mit Retry ───────────────────────
+    let retryCount = 0;
+    const MAX_RETRY = 4;
+
+    function connectToPeer() {
+      if (retryCount >= MAX_RETRY) {
+        setError('Keine Verbindung möglich.\nBitte QR-Code neu scannen.');
+        return;
+      }
+      retryCount++;
+      setStatus(
+        retryCount === 1 ? 'Verbinde mit Moderator…'
+                         : `Verbinde… (Versuch ${retryCount}/${MAX_RETRY})`,
+        'spin'
+      );
+
+      conn = peer.connect(ROOM_ID, { reliable: true });
+
+      // Timeout: falls ICE-Negotiation hängt → retry
+      const iceTimeout = setTimeout(() => {
+        if (!conn.open) {
+          conn.close();
+          setStatus('Timeout – versuche erneut…', 'spin');
+          setTimeout(connectToPeer, 1500);
+        }
+      }, 9000);
+
+      conn.on('open', () => {
+        clearTimeout(iceTimeout);
+        retryCount = 0;
+        setStatus(`Verbunden · ${teamName}`, 'ok');
+        conn.send({ type: 'hello', player: PLAYER });
+        setWaiting();
+      });
+
+      conn.on('data', msg => {
+        if      (msg.type === 'start') setReady();
+        else if (msg.type === 'reset') setWaiting();
+        else if (msg.type === 'lock')  setLocked();
+      });
+
+      conn.on('close', () => {
+        canBuzz = false;
+        setStatus('Verbindung getrennt', 'err');
+        label.className   = 'err';
+        label.textContent = 'Seite neu laden um erneut zu verbinden.';
+      });
+
+      conn.on('error', () => {
+        clearTimeout(iceTimeout);
+        setTimeout(connectToPeer, 1500);
+      });
+    }
+
+    // ── PeerJS initialisieren ─────────────────────────────
     if (!ROOM_ID) {
-      setStatus('Kein Raum-Code!', 'err');
-      label.className   = 'err';
-      label.textContent = 'Bitte QR-Code neu scannen.';
+      setError('Kein Raum-Code – QR-Code neu scannen.');
     } else {
-      const peer = new Peer();
+      const peer = new Peer(undefined, PEER_CFG);
 
-      peer.on('open', myId => {
-        setStatus('Verbinde mit Moderator…', 'spin');
-        conn = peer.connect(ROOM_ID, { reliable: true });
+      peer.on('open', () => connectToPeer());
 
-        conn.on('open', () => {
-          setStatus(`Verbunden · ${teamName}`, 'ok');
-          // Moderator benachrichtigen, welcher Spieler sich verbunden hat
-          conn.send({ type: 'hello', player: PLAYER });
-          setWaiting();
-        });
-
-        conn.on('data', msg => {
-          if (msg.type === 'start') {
-            setReady();
-          } else if (msg.type === 'reset') {
-            setWaiting();
-          } else if (msg.type === 'lock') {
-            setLocked();
-          }
-        });
-
-        conn.on('close', () => {
-          canBuzz = false;
-          setStatus('Verbindung getrennt', 'err');
-          setWaiting('Verbindung unterbrochen – bitte Seite neu laden.');
-          label.className = 'err';
-        });
-
-        conn.on('error', () => {
-          setStatus('Verbindungsfehler', 'err');
-        });
+      peer.on('disconnected', () => {
+        setStatus('Verbindung unterbrochen…', 'spin');
+        peer.reconnect();
       });
 
       peer.on('error', e => {
-        setStatus('Verbindung fehlgeschlagen', 'err');
-        label.className   = 'err';
-        label.textContent = 'Prüfe deine Internetverbindung.';
-        console.error('PeerJS:', e);
+        // 'peer-unavailable': Moderator noch nicht bereit → retry
+        if (e.type === 'peer-unavailable') {
+          setTimeout(connectToPeer, 2000);
+        } else {
+          setError(`Fehler (${e.type}) – Seite neu laden.`);
+          console.error('PeerJS:', e);
+        }
       });
     }
   </script>

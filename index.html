@@ -1199,13 +1199,28 @@ function updateSpotifyUI(loggedIn) {
 let smPeer  = null;
 let smConns = {};   // { playerId: DataConnection }
 
+// ICE-Server-Config: STUN + freier TURN-Relay (openrelay.metered.ca)
+const PEER_CFG = {
+  config: {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: ['turn:openrelay.metered.ca:80',
+               'turn:openrelay.metered.ca:443',
+               'turns:openrelay.metered.ca:443'],
+        username: 'openrelayproject', credential: 'openrelayproject' }
+    ]
+  }
+};
+
 function activatePhoneMode() {
   if (smPeer) return;
   const btn = document.getElementById('btn-phone-mode');
   btn.disabled    = true;
   btn.textContent = '📱 Verbinde…';
 
-  smPeer = new Peer();
+  smPeer = new Peer(undefined, PEER_CFG);
 
   smPeer.on('open', roomId => {
     log('📱 Smartphone-Modus aktiv', 'g');
