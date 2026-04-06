@@ -31,6 +31,16 @@
 
     #app { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 16px; max-width: 540px; margin: 0 auto; }
 
+    /* ── Bestzeiten-Karte ── */
+    #best-times-list { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+    .btime-row  { display: flex; align-items: center; gap: 10px; padding: 7px 10px; background: var(--bg); border-radius: 9px; }
+    .btime-rank { font-size: 1.25rem; width: 30px; text-align: center; flex-shrink: 0; }
+    .btime-info { flex: 1; min-width: 0; }
+    .btime-team { font-weight: 700; font-size: .85rem; }
+    .btime-song { color: var(--muted); font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+    .btime-ms   { font-weight: 800; font-size: 1rem; color: var(--green); white-space: nowrap; flex-shrink: 0; }
+    .btime-empty { color: var(--muted); font-size: .85rem; text-align: center; padding: 10px 0; }
+
     /* ── Responsive: Desktop ab 700 px ── */
     @media (min-width: 700px) {
       #app {
@@ -40,7 +50,7 @@
           "title      title"
           "spotify    controls"
           "spotify    players"
-          "scores     scores"
+          "scores     besttimes"
           "dev        connections"
           "log        log";
         align-items: start;
@@ -50,6 +60,7 @@
       #card-controls    { grid-area: controls; }
       #card-players     { grid-area: players; }
       #card-scores      { grid-area: scores; }
+      #card-besttimes   { grid-area: besttimes; }
       #card-dev         { grid-area: dev; }
       #card-connections { grid-area: connections; }
       #card-log         { grid-area: log; }
@@ -295,6 +306,14 @@
     <div id="scoreboard"></div>
   </div>
 
+  <!-- ── Top 3 Bestzeiten ── -->
+  <div class="card" id="card-besttimes">
+    <div class="card-title">⚡ Schnellste Erkennungen</div>
+    <div id="best-times-list">
+      <div class="btime-empty">Noch keine Wertung – erkenne den ersten Song!</div>
+    </div>
+  </div>
+
   <!-- ── Virtuelle Buzzer (Dev) ── -->
   <div class="card" id="card-dev">
     <div class="card-title">Virtuelle Buzzer (Dev-Modus)</div>
@@ -360,7 +379,7 @@ let tokenExpires = 0;
 let refreshToken = null;
 let bleDevice    = null;
 let ctrlChr      = null;
-let currentRound = 1;
+let currentRound = 0;           // wird in startRound() inkrementiert
 let progressTimer = null;
 let currentProgress = 0;
 let currentDuration = 0;
@@ -368,6 +387,13 @@ let currentBuzzPlayer = 0;
 let scores = [0, 0, 0, 0, 0];   // index 0 unused
 let lockedPlayers = new Set();
 let selectedDeviceId = null;
+
+// ─── Bestzeiten ────────────────────────────────────────────────────────────
+let roundStartTime   = 0;   // Date.now() kurz nach Song-Start
+let firstBuzzPlayer  = 0;   // erster Spieler der Runde (0 = noch keiner)
+let pendingBuzzTime  = 0;   // ms von Song-Start bis zum ersten Buzz
+let pendingTrackName = '';  // Song-Titel zum Zeitpunkt des ersten Buzz
+let bestTimes        = [];  // [{team, color, song, time}] sortiert aufsteigend
 
 // ══════════════════════════════════════════════
 //  LOG
@@ -730,7 +756,12 @@ async function startRound() {
     await loadDevices();
     if (!selectedDeviceId) return;
   }
+  // Runde erst hier inkrementieren – Web-UI ist alleinige Quelle der Wahrheit
+  currentRound++;
   lockedPlayers.clear();
+  firstBuzzPlayer = 0;
+  pendingBuzzTime = 0;
+  pendingTrackName = '';
   resetBadges();
   updateRound();
   setSpotifyBlur(true);
@@ -739,6 +770,7 @@ async function startRound() {
   await showCountdown();
 
   await spotifyNext();
+  roundStartTime = Date.now();   // Zeitmessung startet mit dem Song
   sendByte(0x53); // 'S' → START
   log(`→ START Runde ${currentRound}`, 'g');
 }
@@ -776,19 +808,24 @@ function showCountdown() {
 }
 
 function resetRound() {
-  sendByte(0x52); // 'R'
-  currentRound++;
+  sendByte(0x52); // 'R' → Buzzer zurücksetzen
   lockedPlayers.clear();
-  updateRound();
   resetBadges();
-  setSpotifyBlur(false);
+  setSpotifyBlur(false);   // Song-Titel aufdecken (Auflösung)
   renderScoreboard();
-  log(`→ RESET → Runde ${currentRound}`);
+  log(`→ Auflösung Runde ${currentRound}`);
 }
 
 async function handleBuzz(player, round) {
-  currentRound = round;
+  // currentRound wird von der Web-UI selbst gezählt – Basis-Wert ignorieren
   currentBuzzPlayer = player;
+
+  // Ersten Buzz der Runde erfassen (Zeitmessung für Bestzeiten-Liste)
+  if (firstBuzzPlayer === 0 && roundStartTime > 0) {
+    firstBuzzPlayer  = player;
+    pendingBuzzTime  = Date.now() - roundStartTime;
+    pendingTrackName = document.getElementById('spotify-track').textContent;
+  }
 
   // 1. Spotify sofort pausieren
   await pauseSpotify();
@@ -818,20 +855,20 @@ async function handleBuzz(player, round) {
 async function onRichtig() {
   document.getElementById('buzz-overlay').classList.remove('show');
   stopBuzzTimer();
-  // Titel aufdecken
   setSpotifyBlur(false);
-  // Punkt gutschreiben
   const winner = currentBuzzPlayer;
   if (winner >= 1 && winner <= 4) {
     scores[winner]++;
-    // Badge auf ✓ umschalten
     const badge = document.getElementById(`p${winner}`);
     if (badge) badge.textContent = `✓ ${TEAM_NAMES[winner]}`;
     log(`+1 Punkt fuer ${TEAM_NAMES[winner]} (jetzt ${scores[winner]} Pkt)`, 'g');
   }
-  // Song weiterlaufen lassen
+  // Bestzeit nur werten wenn dieser Spieler auch als Erster gebuzzert hat
+  if (winner === firstBuzzPlayer && pendingBuzzTime > 0 && pendingTrackName && pendingTrackName !== '—') {
+    saveBestTime(winner, pendingTrackName, pendingBuzzTime);
+    log(`⚡ Bestzeit: ${(pendingBuzzTime/1000).toFixed(1)}s – ${pendingTrackName}`, 'g');
+  }
   await resumeSpotify();
-  // Scoreboard aktualisieren (Runde noch nicht wechseln – Moderator sieht Ergebnis)
   renderScoreboard();
 }
 
@@ -920,6 +957,36 @@ function renderScoreboard() {
       <div class="score-num">${p.score}</div>
     </div>`;
   }).join('');
+}
+
+// ══════════════════════════════════════════════
+//  BESTZEITEN
+// ══════════════════════════════════════════════
+
+function saveBestTime(teamId, trackName, timeMs) {
+  bestTimes.push({ team: TEAM_NAMES[teamId], color: P_COLORS[teamId], song: trackName, time: timeMs });
+  bestTimes.sort((a, b) => a.time - b.time);  // aufsteigend = schnellste zuerst
+  renderBestTimes();
+}
+
+function renderBestTimes() {
+  const list = document.getElementById('best-times-list');
+  if (!list) return;
+  const top3 = bestTimes.slice(0, 3);
+  if (top3.length === 0) {
+    list.innerHTML = '<div class="btime-empty">Noch keine Wertung – erkenne den ersten Song!</div>';
+    return;
+  }
+  const MEDALS = ['🥇','🥈','🥉'];
+  list.innerHTML = top3.map((e, i) => `
+    <div class="btime-row">
+      <div class="btime-rank">${MEDALS[i]}</div>
+      <div class="btime-info">
+        <div class="btime-team" style="color:${e.color}">${e.team}</div>
+        <div class="btime-song">${e.song}</div>
+      </div>
+      <div class="btime-ms">${(e.time / 1000).toFixed(1)}s</div>
+    </div>`).join('');
 }
 
 // ══════════════════════════════════════════════
