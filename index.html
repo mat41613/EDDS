@@ -31,6 +31,17 @@
 
     #app { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 16px; max-width: 540px; margin: 0 auto; }
 
+    /* ── Smartphone-Modus ── */
+    #qr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .qr-item  { display: flex; flex-direction: column; align-items: center; gap: 5px;
+                background: var(--bg); border-radius: 10px; padding: 10px 6px; }
+    .qr-item img  { width: 110px; height: 110px; border-radius: 6px; display: block; }
+    .qr-team  { font-size: .78rem; font-weight: 700; }
+    .qr-conn  { font-size: .68rem; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+    .qr-dot   { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+    .qr-dot.ok { background: var(--green); }
+    #phone-status { font-size: .78rem; color: var(--muted); margin: 6px 0 2px; word-break: break-all; }
+
     /* ── Bestzeiten-Karte ── */
     #best-times-list { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
     .btime-row  { display: flex; align-items: center; gap: 10px; padding: 7px 10px; background: var(--bg); border-radius: 9px; }
@@ -344,6 +355,18 @@
       <div id="device-list"></div>
       <div class="btn-row" style="margin-top:12px">
         <button class="btn-outline" id="btn-sp-logout" onclick="spotifyLogout()" style="display:none">Spotify Ausloggen</button>
+      </div>
+    </div>
+
+    <!-- ── Smartphone-Modus ── -->
+    <div style="margin-top:14px; border-top:1px solid var(--border); padding-top:12px">
+      <div class="card-title" style="margin-bottom:8px">📱 Smartphone-Modus</div>
+      <button class="btn-outline" id="btn-phone-mode" onclick="activatePhoneMode()" style="width:100%">
+        Aktivieren (kein Board nötig)
+      </button>
+      <div id="phone-panel" style="display:none">
+        <div id="phone-status"></div>
+        <div id="qr-grid"></div>
       </div>
     </div>
   </div>
@@ -771,7 +794,8 @@ async function startRound() {
 
   await spotifyNext();
   roundStartTime = Date.now();   // Zeitmessung startet mit dem Song
-  sendByte(0x53); // 'S' → START
+  sendByte(0x53); // 'S' → START (physische Buzzer)
+  smBroadcast({ type: 'start' }); // Smartphone-Buzzer freigeben
   log(`→ START Runde ${currentRound}`, 'g');
 }
 
@@ -808,7 +832,8 @@ function showCountdown() {
 }
 
 function resetRound() {
-  sendByte(0x52); // 'R' → Buzzer zurücksetzen
+  sendByte(0x52); // 'R' → physische Buzzer zurücksetzen
+  smBroadcast({ type: 'reset' }); // Smartphone-Buzzer zurücksetzen
   lockedPlayers.clear();
   resetBadges();
   setSpotifyBlur(false);   // Song-Titel aufdecken (Auflösung)
@@ -869,6 +894,7 @@ async function onRichtig() {
     log(`⚡ Bestzeit: ${(pendingBuzzTime/1000).toFixed(1)}s – ${pendingTrackName}`, 'g');
   }
   await resumeSpotify();
+  smBroadcast({ type: 'reset' }); // Alle Smartphones zurücksetzen (Runde vorbei)
   renderScoreboard();
 }
 
@@ -884,6 +910,7 @@ async function onFalsch() {
       log(`→ LOCK Spieler ${player}`, 'y');
     } catch(e) { log('BLE senden fehlgeschlagen: '+e.message,'y'); }
   }
+  smSendTo(player, { type: 'lock' }); // Smartphone sperren
 
   lockedPlayers.add(player);
 
@@ -1164,6 +1191,96 @@ function updateSpotifyUI(loggedIn) {
   renderScoreboard();
   log('Song Quiz bereit');
 })();
+
+// ══════════════════════════════════════════════
+//  SMARTPHONE-MODUS  (PeerJS WebRTC)
+// ══════════════════════════════════════════════
+
+let smPeer  = null;
+let smConns = {};   // { playerId: DataConnection }
+
+function activatePhoneMode() {
+  if (smPeer) return;
+  const btn = document.getElementById('btn-phone-mode');
+  btn.disabled    = true;
+  btn.textContent = '📱 Verbinde…';
+
+  smPeer = new Peer();
+
+  smPeer.on('open', roomId => {
+    log('📱 Smartphone-Modus aktiv', 'g');
+    btn.textContent = '📱 Aktiv';
+    showPhonePanel(roomId);
+    // Spielsteuerung auch ohne physisches Board ermöglichen
+    document.getElementById('btn-start').disabled = false;
+    document.getElementById('btn-reset').disabled = false;
+  });
+
+  smPeer.on('connection', conn => {
+    conn.on('open', () => {
+      conn.on('data', msg => {
+        if (msg.type === 'hello') {
+          const pid = msg.player;
+          smConns[pid] = conn;
+          updatePhoneStatus(pid, true);
+          log(`📱 ${TEAM_NAMES[pid]} verbunden`, 'g');
+          conn.on('close', () => {
+            delete smConns[pid];
+            updatePhoneStatus(pid, false);
+            log(`📱 ${TEAM_NAMES[pid]} getrennt`, 'y');
+          });
+        } else if (msg.type === 'buzz') {
+          handleBuzz(msg.player, currentRound);
+        }
+      });
+    });
+  });
+
+  smPeer.on('error', e => {
+    log(`📱 PeerJS Fehler: ${e.type}`, 'y');
+    btn.disabled    = false;
+    btn.textContent = 'Aktivieren (kein Board nötig)';
+    smPeer = null;
+  });
+}
+
+function smBroadcast(msg) {
+  Object.values(smConns).forEach(c => { try { c.send(msg); } catch(e) {} });
+}
+
+function smSendTo(playerId, msg) {
+  const c = smConns[playerId];
+  if (c) try { c.send(msg); } catch(e) {}
+}
+
+function showPhonePanel(roomId) {
+  const BASE = 'https://mat41613.github.io/EDDS/buzzer.html';
+  document.getElementById('phone-status').textContent = `🔗 Raum: ${roomId.slice(0, 14)}…`;
+  document.getElementById('qr-grid').innerHTML = [1,2,3,4].map(i => {
+    const url = `${BASE}?room=${encodeURIComponent(roomId)}&player=${i}`;
+    const qr  = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&qzone=2&data=${encodeURIComponent(url)}`;
+    return `<div class="qr-item">
+      <a href="${url}" target="_blank" rel="noopener">
+        <img src="${qr}" alt="QR ${TEAM_NAMES[i]}" loading="lazy">
+      </a>
+      <div class="qr-team" style="color:${P_COLORS[i]}">${TEAM_NAMES[i]}</div>
+      <div class="qr-conn">
+        <div class="qr-dot" id="qr-dot-${i}"></div>
+        <span id="qr-lbl-${i}">Warte…</span>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('phone-panel').style.display = 'block';
+}
+
+function updatePhoneStatus(playerId, connected) {
+  const dot = document.getElementById(`qr-dot-${playerId}`);
+  const lbl = document.getElementById(`qr-lbl-${playerId}`);
+  if (dot) dot.className = `qr-dot${connected ? ' ok' : ''}`;
+  if (lbl) lbl.textContent = connected ? 'Verbunden ✓' : 'Warte…';
+}
 </script>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </body>
 </html>
