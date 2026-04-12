@@ -298,6 +298,9 @@
       <button class="btn-yellow" id="btn-start" onclick="startRound()" disabled>▶ Neue Runde</button>
       <button class="btn-green"  id="btn-reset" onclick="resetRound()" disabled>🎵 Auflösung</button>
     </div>
+    <div class="btn-row" style="margin-top:8px">
+      <button class="btn-red" onclick="fullGameReset()" style="width:100%;font-size:.85rem;padding:9px">↺ Spiel komplett zurücksetzen</button>
+    </div>
     <div class="timer-setting">
       <span>⏱ Buzz-Timer</span>
       <input type="number" id="timer-duration" value="20" min="3" max="99" />
@@ -308,12 +311,7 @@
   <!-- ── Spielerstatus ── -->
   <div class="card" id="card-players">
     <div class="card-title">Spielerstatus</div>
-    <div id="player-grid">
-      <div class="pbadge" id="p1" style="border-color:var(--p1)">Team Blau</div>
-      <div class="pbadge" id="p2" style="border-color:var(--p2)">Team Grün</div>
-      <div class="pbadge" id="p3" style="border-color:var(--p3)">Team Rot</div>
-      <div class="pbadge" id="p4" style="border-color:var(--p4)">Team Gelb</div>
-    </div>
+    <div id="player-grid"></div>
   </div>
 
   <!-- ── Punktestand ── -->
@@ -428,7 +426,8 @@ let progressTimer = null;
 let currentProgress = 0;
 let currentDuration = 0;
 let currentBuzzPlayer = 0;
-let scores = [0, 0, 0, 0, 0];   // index 0 unused
+let scores = [0,0,0,0,0,0,0,0,0]; // index 0 unused, 1–8
+let gameNumPlayers = 4;           // aktive Spieleranzahl
 let lockedPlayers = new Set();
 let selectedDeviceId = null;
 
@@ -850,6 +849,25 @@ function showCountdown() {
   });
 }
 
+function fullGameReset() {
+  if (!confirm('Spiel komplett zurücksetzen? Alle Punkte und Bestzeiten werden gelöscht.')) return;
+  scores.fill(0);
+  bestTimes = [];
+  currentRound = 1;
+  currentBuzzPlayer = 0;
+  firstBuzzPlayer   = 0;
+  pendingBuzzTime   = 0;
+  lockedPlayers.clear();
+  sendByte(0x52);
+  smBroadcast({ type: 'reset' });
+  resetBadges();
+  setSpotifyBlur(false);
+  document.getElementById('round-num').textContent = 'Runde 1';
+  renderScoreboard();
+  renderBestTimes();
+  log('Spiel zurückgesetzt', 'y');
+}
+
 function resetRound() {
   sendByte(0x52); // 'R' → physische Buzzer zurücksetzen
   smBroadcast({ type: 'reset' }); // Smartphone-Buzzer zurücksetzen
@@ -900,7 +918,7 @@ async function onRichtig() {
   stopBuzzTimer();
   setSpotifyBlur(false);
   const winner = currentBuzzPlayer;
-  if (winner >= 1 && winner <= 4) {
+  if (winner >= 1 && winner <= gameNumPlayers) {
     scores[winner]++;
     const badge = document.getElementById(`p${winner}`);
     if (badge) badge.textContent = `✓ ${TEAM_NAMES[winner]}`;
@@ -963,23 +981,39 @@ function updateRound() {
   document.getElementById('round-num').textContent = `Runde ${currentRound}`;
 }
 
+function renderPlayerGrid() {
+  const grid = document.getElementById('player-grid');
+  if (!grid) return;
+  const isSingle = smMode === 'single';
+  const cols = gameNumPlayers <= 2 ? gameNumPlayers : 2;
+  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  grid.innerHTML = Array.from({length: gameNumPlayers}, (_, i) => {
+    const id    = i + 1;
+    const color = isSingle ? 'var(--muted)' : (P_COLORS[id] || '#fff');
+    const label = isSingle ? `Spieler ${id}` : (TEAM_NAMES[id] || `Team ${id}`);
+    return `<div class="pbadge" id="p${id}" style="border-color:${color}">${label}</div>`;
+  }).join('');
+}
+
 function resetBadges() {
-  for(let i=1;i<=4;i++) {
+  for (let i = 1; i <= gameNumPlayers; i++) {
     const b = document.getElementById(`p${i}`);
-    if(!b) continue;
+    if (!b) continue;
     b.classList.remove('active', 'locked');
     b.style.background = 'var(--border)';
     b.style.color      = 'var(--muted)';
-    b.textContent      = TEAM_NAMES[i];
+    const isSingle = smMode === 'single';
+    b.textContent = isSingle ? `Spieler ${i}` : (TEAM_NAMES[i] || `Team ${i}`);
   }
 }
 
 function updateScoreBadges() {
-  for(let i=1;i<=4;i++) {
+  for (let i = 1; i <= gameNumPlayers; i++) {
     const b = document.getElementById(`p${i}`);
-    if(!b) continue;
-    if(!b.classList.contains('active') && !b.classList.contains('locked')) {
-      b.textContent = TEAM_NAMES[i];
+    if (!b) continue;
+    if (!b.classList.contains('active') && !b.classList.contains('locked')) {
+      const isSingle = smMode === 'single';
+      b.textContent = isSingle ? `Spieler ${i}` : (TEAM_NAMES[i] || `Team ${i}`);
     }
   }
   renderScoreboard();
@@ -989,8 +1023,8 @@ function renderScoreboard() {
   const board = document.getElementById('scoreboard');
   if (!board) return;
 
-  const players = [1,2,3,4].map(i => ({
-    id: i, score: scores[i], color: P_COLORS[i]
+  const players = Array.from({length: gameNumPlayers}, (_, i) => ({
+    id: i+1, score: scores[i+1], color: P_COLORS[i+1]
   }));
   players.sort((a, b) => b.score - a.score || a.id - b.id);
 
@@ -1219,6 +1253,7 @@ function updateSpotifyUI(loggedIn) {
     log('Bitte mit Spotify einloggen');
   }
 
+  renderPlayerGrid();
   renderScoreboard();
   log('Song Quiz bereit');
 })();
@@ -1251,6 +1286,9 @@ function activatePhoneMode() {
 
   smMode  = document.getElementById('sm-mode').value;
   smCount = smMode === 'single' ? 1 : parseInt(document.getElementById('sm-count').value);
+  gameNumPlayers = smCount;
+  renderPlayerGrid();
+  renderScoreboard();
 
   const btn = document.getElementById('btn-phone-mode');
   btn.disabled    = true;
