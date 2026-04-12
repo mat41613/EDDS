@@ -8,13 +8,11 @@
   <title>BuzzQuiz – Buzzer</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root { --tc: #888; --tt: #fff; }
 
     html, body {
       height: 100%; width: 100%;
-      background: #0d0d0d;
-      color: #f0f0f0;
+      background: #0d0d0d; color: #f0f0f0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
@@ -23,31 +21,37 @@
       touch-action: manipulation;
     }
 
-    /* ── Statusleiste oben ─────────────────────────────── */
+    /* ── Statusleiste ────────────────────────────────────── */
     #status-bar {
       position: fixed; top: 0; left: 0; right: 0;
       display: flex; align-items: center; gap: 8px;
       padding: 14px 18px;
-      background: rgba(0,0,0,.55);
-      backdrop-filter: blur(6px);
+      background: rgba(0,0,0,.55); backdrop-filter: blur(6px);
       font-size: .82rem;
     }
     #status-dot {
       width: 9px; height: 9px; border-radius: 50%;
-      background: #555; flex-shrink: 0;
-      transition: background .3s;
+      background: #555; flex-shrink: 0; transition: background .3s;
     }
     #status-dot.ok   { background: #00e050; }
     #status-dot.err  { background: #ff3030; }
     #status-dot.spin { background: #ffe000; animation: blink .8s infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
-    #status-text { color: #aaa; }
+    #status-text { color: #aaa; font-size: .78rem; }
 
-    /* ── Spieler-/Teamname ─────────────────────────────── */
+    /* ── Debug-Zeile (klein, unter Statusbar) ────────────── */
+    #debug-bar {
+      position: fixed; top: 44px; left: 0; right: 0;
+      padding: 3px 18px;
+      font-size: .65rem; color: #555;
+      background: rgba(0,0,0,.4);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* ── Teamname ──────────────────────────────────────────*/
     #team-name {
       font-size: clamp(1.6rem, 7vw, 2.4rem);
-      font-weight: 900;
-      letter-spacing: .06em;
+      font-weight: 900; letter-spacing: .06em;
       margin-bottom: clamp(24px, 6vh, 48px);
       color: var(--tc);
     }
@@ -56,84 +60,117 @@
     #buzz-btn {
       width:  min(62vw, 62vh, 260px);
       height: min(62vw, 62vh, 260px);
-      border-radius: 50%;
-      border: none;
-      cursor: pointer;
+      border-radius: 50%; border: none; cursor: pointer;
       font-size: clamp(2rem, 8vw, 3rem);
-      font-weight: 900;
-      letter-spacing: .04em;
-      color: var(--tt);
-      background: #333;
-      box-shadow:
-        0 12px 40px rgba(0,0,0,.6),
-        0  4px 12px rgba(0,0,0,.4),
-        inset 0 -8px 0 rgba(0,0,0,.35);
+      font-weight: 900; letter-spacing: .04em;
+      color: var(--tt); background: #333;
+      box-shadow: 0 12px 40px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.4), inset 0 -8px 0 rgba(0,0,0,.35);
       transition: background .25s, transform .08s, box-shadow .08s;
       -webkit-tap-highlight-color: transparent;
     }
     #buzz-btn:active {
       transform: scale(.93);
-      box-shadow:
-        0  4px 16px rgba(0,0,0,.6),
-        0  2px  6px rgba(0,0,0,.4),
-        inset 0 -3px 0 rgba(0,0,0,.35);
+      box-shadow: 0 4px 16px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.4), inset 0 -3px 0 rgba(0,0,0,.35);
     }
-
-    /* Zustände */
     #buzz-btn.waiting { background: #2a2a2a; color: #444; cursor: not-allowed; }
     #buzz-btn.ready   { background: var(--tc); color: var(--tt); }
-    #buzz-btn.buzzed  { background: #ffffff;   color: #111; transform: scale(.96); }
-    #buzz-btn.locked  { background: #1e1e1e;   color: #333; cursor: not-allowed; }
+    #buzz-btn.buzzed  { background: #ffffff; color: #111; transform: scale(.96); }
+    #buzz-btn.locked  { background: #1e1e1e; color: #333; cursor: not-allowed; }
 
-    /* Pulsieren wenn bereit */
     @keyframes pulse-ring {
-      0%   { box-shadow: 0 12px 40px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.4),
-                         inset 0 -8px 0 rgba(0,0,0,.35), 0 0 0 0 var(--tc); }
-      60%  { box-shadow: 0 12px 40px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.4),
-                         inset 0 -8px 0 rgba(0,0,0,.35), 0 0 0 24px transparent; }
-      100% { box-shadow: 0 12px 40px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.4),
-                         inset 0 -8px 0 rgba(0,0,0,.35), 0 0 0 0 transparent; }
+      0%   { box-shadow: 0 12px 40px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.4), inset 0 -8px 0 rgba(0,0,0,.35), 0 0 0 0 var(--tc); }
+      60%  { box-shadow: 0 12px 40px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.4), inset 0 -8px 0 rgba(0,0,0,.35), 0 0 0 24px transparent; }
+      100% { box-shadow: 0 12px 40px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.4), inset 0 -8px 0 rgba(0,0,0,.35), 0 0 0 0 transparent; }
     }
     #buzz-btn.ready { animation: pulse-ring 2.2s ease-out infinite; }
 
-    /* ── Status-Text unter Button ──────────────────────── */
+    /* ── Label unter Button ────────────────────────────── */
     #buzz-label {
       margin-top: clamp(18px, 4vh, 32px);
       font-size: clamp(.9rem, 3.5vw, 1.1rem);
-      color: #666;
-      min-height: 1.6em;
-      text-align: center;
+      color: #666; min-height: 1.6em; text-align: center;
       transition: color .3s;
     }
     #buzz-label.active { color: var(--tc); }
     #buzz-label.err    { color: #ff3030; }
+
+    /* ── Retry-Button ──────────────────────────────────── */
+    #retry-btn {
+      margin-top: 18px;
+      padding: 10px 24px; border-radius: 20px;
+      border: 1px solid #444; background: transparent;
+      color: #aaa; font-size: .9rem; cursor: pointer;
+      display: none;
+    }
+    #retry-btn:active { background: #222; }
   </style>
 </head>
 <body>
 
   <div id="status-bar">
     <div id="status-dot spin"></div>
-    <span id="status-text">Verbinde…</span>
+    <span id="status-text">Starte…</span>
   </div>
+  <div id="debug-bar">Lade Bibliothek…</div>
 
   <div id="team-name">…</div>
   <button id="buzz-btn" class="waiting" onclick="onBuzz()">BUZZ!</button>
   <div id="buzz-label">Warte auf Verbindung…</div>
+  <button id="retry-btn" onclick="retry()">🔄 Erneut verbinden</button>
 
-  <script src="https://unpkg.com/mqtt@4.3.8/dist/mqtt.min.js"></script>
+  <!-- mqtt.js: primär von unpkg, Fallback auf cdnjs -->
+  <script>
+    function loadScript(src, cb) {
+      const s = document.createElement('script');
+      s.src = src; s.onload = cb;
+      s.onerror = () => { dbg('Script-Fehler: ' + src); cb(new Error('load failed')); };
+      document.head.appendChild(s);
+    }
+
+    function dbg(msg) {
+      document.getElementById('debug-bar').textContent = msg;
+    }
+
+    const MQTT_CDN_URLS = [
+      'https://unpkg.com/mqtt@4.3.8/dist/mqtt.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.8/mqtt.min.js',
+    ];
+
+    // Versuche CDNs der Reihe nach
+    function loadMqttLib(idx) {
+      if (idx >= MQTT_CDN_URLS.length) {
+        dbg('FEHLER: mqtt.js konnte nicht geladen werden');
+        setStatus('Bibliothek nicht ladbar – WLAN prüfen', 'err');
+        return;
+      }
+      dbg('Lade: ' + MQTT_CDN_URLS[idx]);
+      loadScript(MQTT_CDN_URLS[idx], (err) => {
+        if (err || typeof mqtt === 'undefined') {
+          dbg('Fallback auf nächsten CDN…');
+          loadMqttLib(idx + 1);
+        } else {
+          dbg('mqtt.js OK – verbinde…');
+          init();
+        }
+      });
+    }
+
+    loadMqttLib(0);
+  </script>
+
   <script>
     // ── URL-Parameter ──────────────────────────────────────
     const params  = new URLSearchParams(location.search);
     const ROOM_ID = params.get('room');
     const PLAYER  = parseInt(params.get('player') || '1');
-    const MODE    = params.get('mode') || 'team';   // 'team' | 'single'
+    const MODE    = params.get('mode') || 'team';
 
-    // ── Team-Definitionen (8 Teams) ────────────────────────
+    // ── Team-Definitionen ──────────────────────────────────
     const TEAM_NAMES  = ['','Team Blau','Team Grün','Team Rot','Team Gelb','Team Lila','Team Orange','Team Pink','Team Cyan'];
     const TEAM_COLORS = ['','#40a0ff','#00e050','#ff3030','#ffe000','#b060ff','#ff8800','#ff40c0','#00d0d0'];
     const TEXT_COLORS = ['','#000','#000','#fff','#000','#fff','#000','#000','#000'];
 
-    // ── Darstellung je Modus ───────────────────────────────
+    // ── Darstellung ────────────────────────────────────────
     let displayName, teamColor, textColor;
     if (MODE === 'single') {
       displayName = 'Einzelspieler';
@@ -144,23 +181,30 @@
       teamColor   = TEAM_COLORS[PLAYER] || '#40a0ff';
       textColor   = TEXT_COLORS[PLAYER] || '#000';
     }
-
     document.title = `${displayName} – BuzzQuiz`;
     document.getElementById('team-name').textContent = displayName;
     document.documentElement.style.setProperty('--tc', teamColor);
     document.documentElement.style.setProperty('--tt', textColor);
 
-    const btn   = document.getElementById('buzz-btn');
-    const label = document.getElementById('buzz-label');
+    const btn      = document.getElementById('buzz-btn');
+    const label    = document.getElementById('buzz-label');
+    const retryBtn = document.getElementById('retry-btn');
 
     let canBuzz = false;
     let client  = null;
 
-    const MQTT_BROKER = 'wss://broker.hivemq.com:8884/mqtt';
-    const TOPIC_CMD   = `buzzquiz/${ROOM_ID}/cmd`;
-    const TOPIC_BUZZ  = `buzzquiz/${ROOM_ID}/buzz`;
+    // Broker-Liste: bei Fehler wird der nächste versucht
+    const BROKERS = [
+      'wss://broker.emqx.io:8084/mqtt',
+      'wss://test.mosquitto.org:8081/mqtt',
+      'wss://broker.hivemq.com:8884/mqtt',
+    ];
+    let brokerIdx = 0;
 
-    // ── UI-Helfer ─────────────────────────────────────────
+    const TOPIC_CMD  = () => `buzzquiz/${ROOM_ID}/cmd`;
+    const TOPIC_BUZZ = () => `buzzquiz/${ROOM_ID}/buzz`;
+
+    // ── UI-Helfer ──────────────────────────────────────────
     function setStatus(text, state) {
       document.getElementById('status-text').textContent = text;
       document.getElementById('status-dot').className    = state || '';
@@ -182,7 +226,7 @@
       label.className = 'err'; label.textContent = 'Gesperrt für diese Runde';
     }
 
-    // ── Buzz senden ───────────────────────────────────────
+    // ── Buzz senden ────────────────────────────────────────
     function onBuzz() {
       if (!canBuzz || !client) return;
       navigator.vibrate && navigator.vibrate([60, 30, 60]);
@@ -191,80 +235,125 @@
     }
 
     function publish(msg) {
-      if (client) client.publish(TOPIC_BUZZ, JSON.stringify(msg), { qos: 0 });
+      if (client && client.connected) {
+        client.publish(TOPIC_BUZZ(), JSON.stringify(msg), { qos: 0 });
+      }
     }
 
-    // ── MQTT verbinden ────────────────────────────────────
-    function connect() {
-      if (!ROOM_ID) {
-        setStatus('Kein Raum-Code – QR-Code neu scannen.', 'err');
-        label.className = 'err';
-        label.textContent = 'Kein Raum-Code gefunden.';
-        return;
-      }
+    // ── Retry ──────────────────────────────────────────────
+    function retry() {
+      retryBtn.style.display = 'none';
+      brokerIdx = 0;
+      if (client) { try { client.end(true); } catch {} client = null; }
+      connectBroker(brokerIdx);
+    }
 
+    // ── Verbindung aufbauen ────────────────────────────────
+    function connectBroker(idx) {
+      const broker   = BROKERS[idx];
       const clientId = `bq_p${PLAYER}_` + Math.random().toString(36).slice(2, 8);
-      setStatus('Verbinde…', 'spin');
 
-      client = mqtt.connect(MQTT_BROKER, {
+      setStatus(`Verbinde… (${idx + 1}/${BROKERS.length})`, 'spin');
+      dbg(broker);
+
+      // Timeout: wenn nach 12s keine Verbindung → nächsten Broker
+      const failTimer = setTimeout(() => {
+        dbg('Timeout – versuche nächsten Broker');
+        if (client) { try { client.end(true); } catch {} client = null; }
+        const next = idx + 1;
+        if (next < BROKERS.length) {
+          connectBroker(next);
+        } else {
+          brokerIdx = 0;
+          setStatus('Verbindung fehlgeschlagen', 'err');
+          label.className = 'err';
+          label.textContent = 'WLAN-Verbindung prüfen';
+          retryBtn.style.display = 'block';
+          dbg('Alle Broker fehlgeschlagen');
+        }
+      }, 12000);
+
+      client = mqtt.connect(broker, {
         clientId,
         clean:           true,
         connectTimeout:  10000,
-        reconnectPeriod: 4000,
-        protocolVersion: 4,   // MQTT 3.1.1
+        reconnectPeriod: 0,     // kein Auto-Reconnect; wir steuern selbst
+        protocolVersion: 4,
       });
 
-      // 'connect' feuert bei Verbindung UND bei jedem Reconnect
       client.on('connect', () => {
-        // Bei jedem (Re-)Connect neu subscriben und Hello senden
-        client.subscribe(TOPIC_CMD, { qos: 0 }, err => {
+        clearTimeout(failTimer);
+        brokerIdx = idx;
+        dbg(`Verbunden: ${broker}`);
+
+        client.subscribe(TOPIC_CMD(), { qos: 0 }, err => {
           if (err) {
-            setStatus('Subscribe fehlgeschlagen', 'err');
+            dbg('Subscribe fehlgeschlagen');
+            setStatus('Subscribe-Fehler', 'err');
             return;
           }
-          setStatus(`Verbunden · ${displayName}`, 'ok');
+          setStatus(`✓ ${displayName}`, 'ok');
           publish({ type: 'hello', player: PLAYER });
-          // Beim Reconnect: Zustand beibehalten (nicht zwangsläufig auf Waiting)
-          if (!canBuzz && btn.className !== 'locked' && btn.className !== 'buzzed') {
-            setWaiting();
-          }
+          setWaiting();
+        });
+
+        // Nach Verbindungsverlust: gleichen Broker neu versuchen, dann rotieren
+        client.on('close', () => {
+          if (canBuzz) { canBuzz = false; }
+          setStatus('Verbindung verloren – verbinde neu…', 'spin');
+          dbg('close → reconnect in 3s');
+          setTimeout(() => {
+            if (client) { try { client.end(true); } catch {} client = null; }
+            connectBroker(brokerIdx);
+          }, 3000);
         });
       });
 
       client.on('message', (topic, payload) => {
         let msg;
         try { msg = JSON.parse(payload.toString()); } catch { return; }
-
-        // Gerichtete Nachrichten filtern (nur an diesen Spieler oder Broadcast)
         if (msg.target !== undefined && msg.target !== PLAYER) return;
-
         if      (msg.type === 'start') setReady();
         else if (msg.type === 'reset') setWaiting();
         else if (msg.type === 'lock')  setLocked();
       });
 
-      client.on('reconnect', () => {
-        setStatus('Verbinde erneut…', 'spin');
-      });
-
-      client.on('offline', () => {
-        canBuzz = false;
-        setStatus('Keine Verbindung', 'err');
-      });
-
       client.on('error', e => {
-        setStatus(`Fehler: ${e.message || e}`, 'err');
+        clearTimeout(failTimer);
+        const errMsg = e.message || String(e);
+        dbg('Fehler: ' + errMsg);
+        setStatus('Fehler – versuche anderen Broker', 'spin');
+        try { client.end(true); } catch {}
+        client = null;
+        const next = idx + 1;
+        if (next < BROKERS.length) {
+          setTimeout(() => connectBroker(next), 1000);
+        } else {
+          setStatus('Verbindung fehlgeschlagen', 'err');
+          label.className = 'err';
+          label.textContent = 'WLAN-Verbindung prüfen';
+          retryBtn.style.display = 'block';
+        }
       });
     }
 
-    // Beim Verlassen der Seite abmelden
-    window.addEventListener('beforeunload', () => {
-      if (client) {
-        try { client.publish(TOPIC_BUZZ, JSON.stringify({ type: 'bye', player: PLAYER }), { qos: 0 }); } catch {}
+    // ── Start (wird von loadMqttLib aufgerufen) ───────────
+    function init() {
+      if (!ROOM_ID) {
+        setStatus('Kein Raum-Code', 'err');
+        label.className = 'err';
+        label.textContent = 'QR-Code neu scannen.';
+        dbg('Kein room= Parameter in der URL');
+        return;
       }
-    });
+      dbg(`Raum: ${ROOM_ID}  Spieler: ${PLAYER}`);
+      connectBroker(0);
+    }
 
-    connect();
+    // Beim Verlassen abmelden
+    window.addEventListener('beforeunload', () => {
+      try { publish({ type: 'bye', player: PLAYER }); } catch {}
+    });
   </script>
 </body>
 </html>
