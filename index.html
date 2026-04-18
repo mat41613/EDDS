@@ -775,7 +775,7 @@ function onBleDisconnect() {
   log('BLE getrennt', 'y');
 }
 
-function onBleNotify(e) {
+async function onBleNotify(e) {
   const raw = new TextDecoder().decode(e.target.value);
   log('← ' + raw);
   let msg;
