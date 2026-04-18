@@ -780,7 +780,18 @@ function onBleNotify(e) {
   log('← ' + raw);
   let msg;
   try { msg = JSON.parse(raw); } catch { return; }
-  if (msg.type === 'pause') handleBuzz(msg.player, msg.round);
+
+  if (msg.type === 'pause') {
+    handleBuzz(msg.player, msg.round);
+  } else if (msg.type === 'hwstart') {
+    // Physischer Start-Button an der Basis gedrückt
+    log('▶ Neue Runde (Basis-Button)', 'g');
+    startRound();   // sendet 'S' zurück – Basis ignoriert Duplikat
+  } else if (msg.type === 'hwreset') {
+    // Physischer Auflösungs-Button an der Basis gedrückt
+    log('🎵 Auflösung (Basis-Button)', 'g');
+    resetRound();   // sendet 'R' zurück – Basis ignoriert Duplikat
+  }
 }
 
 async function sendByte(b) {
@@ -853,7 +864,7 @@ function fullGameReset() {
   if (!confirm('Spiel komplett zurücksetzen? Alle Punkte und Bestzeiten werden gelöscht.')) return;
   scores.fill(0);
   bestTimes = [];
-  currentRound = 1;
+  currentRound = 0;
   currentBuzzPlayer = 0;
   firstBuzzPlayer   = 0;
   pendingBuzzTime   = 0;
@@ -1253,10 +1264,15 @@ function updateSpotifyUI(loggedIn) {
     log('Bitte mit Spotify einloggen');
   }
 
-  renderPlayerGrid();
   renderScoreboard();
   log('Song Quiz bereit');
 })();
+
+// Spielerstatus sofort beim Laden rendern – unabhängig von Spotify/BLE
+window.addEventListener('DOMContentLoaded', () => {
+  renderPlayerGrid();
+  renderScoreboard();
+});
 
 // ══════════════════════════════════════════════
 //  SMARTPHONE-MODUS  (MQTT über WebSocket)
