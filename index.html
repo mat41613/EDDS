@@ -234,6 +234,29 @@
     .le.g { color: var(--green); }
     .le.y { color: var(--yellow); }
     .le.b { color: var(--text); font-weight: 600; }
+
+    /* ── Result-Flash (Hardware-Button Richtig/Falsch) ── */
+    #result-flash {
+      display: none; position: fixed; inset: 0; z-index: 300;
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 6px; pointer-events: none;
+    }
+    #result-flash.show { display: flex; }
+    #result-flash-icon {
+      font-size: clamp(5rem, 25vw, 10rem);
+      line-height: 1; font-weight: 900;
+    }
+    #result-flash-label {
+      font-size: clamp(2rem, 10vw, 4rem);
+      font-weight: 900; letter-spacing: .06em; color: #fff;
+    }
+    @keyframes hw-flash {
+      0%   { opacity: 0; transform: scale(1.25); }
+      12%  { opacity: 1; transform: scale(1.00); }
+      72%  { opacity: 1; transform: scale(1.00); }
+      100% { opacity: 0; transform: scale(0.88); }
+    }
+    #result-flash.show { animation: hw-flash 1.5s ease forwards; }
   </style>
 </head>
 <body>
@@ -261,6 +284,12 @@
     <button class="btn-richtig" onclick="onRichtig()">✓ Richtig</button>
     <button class="btn-falsch"  onclick="onFalsch()">✗ Falsch</button>
   </div>
+</div>
+
+<!-- Result-Flash Overlay (Hardware-Button Richtig / Falsch) -->
+<div id="result-flash">
+  <div id="result-flash-icon">✓</div>
+  <div id="result-flash-label">RICHTIG!</div>
 </div>
 
 <div id="app">
@@ -793,11 +822,13 @@ async function onBleNotify(e) {
     // Physischer Richtig-Button: Basis hat reset bereits ausgelöst
     log(`✓ Richtig (Basis-Button) Spieler ${msg.player}`, 'g');
     if (msg.player) currentBuzzPlayer = msg.player;
+    showResultFlash(true);
     await onRichtig(false);  // false = kein BLE 'R' zurücksenden (vermeide Loop)
   } else if (msg.type === 'hwfalsch') {
     // Physischer Falsch-Button: Basis hat lock bereits ausgelöst
     log(`✗ Falsch (Basis-Button) Spieler ${msg.player}`, 'y');
     if (msg.player) currentBuzzPlayer = msg.player;
+    showResultFlash(false);
     await onFalsch(false);   // false = kein BLE 'L' zurücksenden (vermeide Loop)
   }
 }
@@ -1222,6 +1253,27 @@ async function playTrackByIndex(i) {
 function setBleDot(state, label) {
   document.getElementById('ble-dot').className   = 'dot ' + {ok:'ok',busy:'busy',err:'err'}[state];
   document.getElementById('ble-label').textContent = label;
+}
+
+function showResultFlash(richtig) {
+  const overlay = document.getElementById('result-flash');
+  const icon    = document.getElementById('result-flash-icon');
+  const label   = document.getElementById('result-flash-label');
+  if (!overlay) return;
+
+  overlay.style.background = richtig
+    ? 'rgba(0, 200, 70, 0.93)'
+    : 'rgba(220, 30, 30, 0.93)';
+  icon.textContent  = richtig ? '✓' : '✗';
+  label.textContent = richtig ? 'RICHTIG!' : 'FALSCH!';
+
+  // Animation neu starten (reflow erzwingt Reset)
+  overlay.classList.remove('show');
+  void overlay.offsetWidth;
+  overlay.classList.add('show');
+
+  // Nach Animation sauber entfernen
+  setTimeout(() => overlay.classList.remove('show'), 1500);
 }
 
 function updateSpotifyUI(loggedIn) {
