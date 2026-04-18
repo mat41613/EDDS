@@ -784,13 +784,21 @@ function onBleNotify(e) {
   if (msg.type === 'pause') {
     handleBuzz(msg.player, msg.round);
   } else if (msg.type === 'hwstart') {
-    // Physischer Start-Button an der Basis gedrückt
     log('▶ Neue Runde (Basis-Button)', 'g');
-    startRound();   // sendet 'S' zurück – Basis ignoriert Duplikat
+    startRound();        // sendet 'S' zurück – Basis ignoriert Duplikat
   } else if (msg.type === 'hwreset') {
-    // Physischer Auflösungs-Button an der Basis gedrückt
     log('🎵 Auflösung (Basis-Button)', 'g');
-    resetRound();   // sendet 'R' zurück – Basis ignoriert Duplikat
+    resetRound();        // sendet 'R' zurück – Basis ignoriert Duplikat
+  } else if (msg.type === 'hwrichtig') {
+    // Physischer Richtig-Button: Basis hat reset bereits ausgelöst
+    log(`✓ Richtig (Basis-Button) Spieler ${msg.player}`, 'g');
+    if (msg.player) currentBuzzPlayer = msg.player;
+    await onRichtig(false);  // false = kein BLE 'R' zurücksenden (vermeide Loop)
+  } else if (msg.type === 'hwfalsch') {
+    // Physischer Falsch-Button: Basis hat lock bereits ausgelöst
+    log(`✗ Falsch (Basis-Button) Spieler ${msg.player}`, 'y');
+    if (msg.player) currentBuzzPlayer = msg.player;
+    await onFalsch(false);   // false = kein BLE 'L' zurücksenden (vermeide Loop)
   }
 }
 
@@ -924,7 +932,7 @@ async function handleBuzz(player, round) {
   log(`Buzz: ${name} – Runde ${round}`, 'b');
 }
 
-async function onRichtig() {
+async function onRichtig(sendBle = true) {
   document.getElementById('buzz-overlay').classList.remove('show');
   stopBuzzTimer();
   setSpotifyBlur(false);
@@ -947,7 +955,7 @@ async function onRichtig() {
     }
   }
   // RESET an Basis senden → Buzzer-LEDs aus, nächste Runde vorbereiten
-  if (ctrlChr) {
+  if (sendBle && ctrlChr) {
     try {
       await ctrlChr.writeValueWithoutResponse(new Uint8Array([0x52]));
     } catch(e) { log('BLE RESET fehlgeschlagen: '+e.message, 'y'); }
@@ -957,13 +965,13 @@ async function onRichtig() {
   renderScoreboard();
 }
 
-async function onFalsch() {
+async function onFalsch(sendBle = true) {
   document.getElementById('buzz-overlay').classList.remove('show');
   stopBuzzTimer();
   const player = currentBuzzPlayer;
 
   // Spieler sperren: 2-Byte-Befehl 'L' + player_id
-  if (ctrlChr && player >= 1 && player <= 4) {
+  if (sendBle && ctrlChr && player >= 1 && player <= 4) {
     try {
       await ctrlChr.writeValueWithoutResponse(new Uint8Array([0x4C, player]));
       log(`→ LOCK Spieler ${player}`, 'y');
