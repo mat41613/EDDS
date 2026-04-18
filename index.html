@@ -241,7 +241,6 @@
       flex-direction: column; align-items: center; justify-content: center;
       gap: 6px; pointer-events: none;
     }
-    #result-flash.show { display: flex; }
     #result-flash-icon {
       font-size: clamp(5rem, 25vw, 10rem);
       line-height: 1; font-weight: 900;
@@ -256,7 +255,7 @@
       72%  { opacity: 1; transform: scale(1.00); }
       100% { opacity: 0; transform: scale(0.88); }
     }
-    #result-flash.show { animation: hw-flash 1.5s ease forwards; }
+    #result-flash.show { display: flex; animation: hw-flash 1.5s ease forwards; }
   </style>
 </head>
 <body>
@@ -822,13 +821,11 @@ async function onBleNotify(e) {
     // Physischer Richtig-Button: Basis hat reset bereits ausgelöst
     log(`✓ Richtig (Basis-Button) Spieler ${msg.player}`, 'g');
     if (msg.player) currentBuzzPlayer = msg.player;
-    showResultFlash(true);
     await onRichtig(false);  // false = kein BLE 'R' zurücksenden (vermeide Loop)
   } else if (msg.type === 'hwfalsch') {
     // Physischer Falsch-Button: Basis hat lock bereits ausgelöst
     log(`✗ Falsch (Basis-Button) Spieler ${msg.player}`, 'y');
     if (msg.player) currentBuzzPlayer = msg.player;
-    showResultFlash(false);
     await onFalsch(false);   // false = kein BLE 'L' zurücksenden (vermeide Loop)
   }
 }
@@ -965,6 +962,7 @@ async function handleBuzz(player, round) {
 
 async function onRichtig(sendBle = true) {
   document.getElementById('buzz-overlay').classList.remove('show');
+  showResultFlash(true);
   stopBuzzTimer();
   setSpotifyBlur(false);
   const winner = currentBuzzPlayer;
@@ -998,6 +996,7 @@ async function onRichtig(sendBle = true) {
 
 async function onFalsch(sendBle = true) {
   document.getElementById('buzz-overlay').classList.remove('show');
+  showResultFlash(false);
   stopBuzzTimer();
   const player = currentBuzzPlayer;
 
