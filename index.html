@@ -439,6 +439,11 @@ const CTRL_UUID    = '0000ff02-0000-1000-8000-00805f9b34fb';
 const P_COLORS   = ['','#40a0ff','#00e050','#ff3030','#ffe000','#b060ff','#ff8800','#ff40c0','#00d0d0','#40ffb0','#ff6040'];
 const P_TEXT     = ['','#000',   '#000',   '#fff',   '#000',   '#fff',   '#000',   '#000',   '#000',   '#000',   '#fff'  ];
 const TEAM_NAMES = ['','Team Blau','Team Grün','Team Rot','Team Gelb','Team Lila','Team Orange','Team Pink','Team Cyan','Team Mint','Team Koralle'];
+// Spieler-Namen – werden via BLE-Notification aktualisiert wenn Handys ihren Namen senden.
+// Startet als Kopie der TEAM_NAMES (Standard-Fallback).
+let playerNames = [...TEAM_NAMES];
+// Hilfsfunktion: gibt den aktuellen Anzeige-Namen eines Spielers zurück
+function pname(id) { return playerNames[id] || TEAM_NAMES[id] || `Team ${id}`; }
 
 // ══════════════════════════════════════════════
 //  STATE
@@ -844,7 +849,17 @@ async function onBleNotify(e) {
     if (msg.player >= 1 && msg.player <= 10) {
       phoneOnline[msg.player] = msg.online;
       updatePhoneDot(msg.player);
-      log(`📱 Spieler ${msg.player}: ${msg.online ? 'online' : 'offline'}`, msg.online ? 'g' : '');
+      log(`📱 ${pname(msg.player)}: ${msg.online ? 'online' : 'offline'}`, msg.online ? 'g' : '');
+    }
+  } else if (msg.type === 'pname') {
+    // Spieler-Name vom Handy empfangen
+    if (msg.player >= 1 && msg.player <= 10 && msg.name) {
+      const n = String(msg.name).trim().substring(0, 20);
+      if (n) {
+        playerNames[msg.player] = n;
+        updatePlayerNameUI(msg.player, n);
+        log(`✏️ Spieler ${msg.player} heißt jetzt: ${n}`, 'g');
+      }
     }
   }
 }
@@ -974,7 +989,7 @@ async function handleBuzz(player, round) {
   clearInterval(progressTimer);
 
   // 2. Spieler-Badge hervorheben
-  const name  = TEAM_NAMES[player] || `Team ${player}`;
+  const name  = pname(player);
   const badge = document.getElementById(`p${player}`);
   if (badge) {
     badge.style.background = P_COLORS[player] || '#fff';
@@ -1003,8 +1018,8 @@ async function onRichtig(sendBle = true) {
   if (winner >= 1 && winner <= gameNumPlayers) {
     scores[winner]++;
     const badge = document.getElementById(`p${winner}`);
-    if (badge) badge.textContent = `✓ ${TEAM_NAMES[winner]}`;
-    log(`+1 Punkt fuer ${TEAM_NAMES[winner]} (jetzt ${scores[winner]} Pkt)`, 'g');
+    if (badge) badge.textContent = `✓ ${pname(winner)}`;
+    log(`+1 Punkt fuer ${pname(winner)} (jetzt ${scores[winner]} Pkt)`, 'g');
   }
   // Bestzeit nur werten wenn dieser Spieler auch als Erster gebuzzert hat.
   // Titel + Künstler erst JETZT aus dem DOM lesen – Spotify hat inzwischen
@@ -1049,12 +1064,12 @@ async function onFalsch(sendBle = true) {
     badge.style.color      = 'var(--muted)';
     badge.classList.remove('active');
     badge.classList.add('locked');
-    badge.textContent = `✗ ${TEAM_NAMES[player]}`;
+    badge.textContent = `✗ ${pname(player)}`;
   }
 
   // Song weiter abspielen – andere koennen noch buzzen
   await resumeSpotify();
-  log(`${TEAM_NAMES[player]} gesperrt – Runde laeuft weiter`, 'y');
+  log(`${pname(player)} gesperrt – Runde laeuft weiter`, 'y');
 }
 
 function updateRound() {
@@ -1070,7 +1085,7 @@ function renderPlayerGrid() {
   grid.innerHTML = Array.from({length: n}, (_, i) => {
     const id    = i + 1;
     const color = P_COLORS[id] || '#fff';
-    const label = TEAM_NAMES[id] || `Team ${id}`;
+    const label = pname(id);
     return `<div class="pbadge" id="p${id}" style="border-color:${color}">${label}</div>`;
   }).join('');
 }
@@ -1083,7 +1098,7 @@ function resetBadges() {
     b.classList.remove('active', 'locked');
     b.style.background = 'var(--border)';
     b.style.color      = 'var(--muted)';
-    b.textContent = TEAM_NAMES[i] || `Team ${i}`;
+    b.textContent = pname(i);
   }
 }
 
@@ -1093,7 +1108,7 @@ function updateScoreBadges() {
     const b = document.getElementById(`p${i}`);
     if (!b) continue;
     if (!b.classList.contains('active') && !b.classList.contains('locked')) {
-      b.textContent = TEAM_NAMES[i] || `Team ${i}`;
+      b.textContent = pname(i);
     }
   }
   renderScoreboard();
@@ -1120,7 +1135,7 @@ function renderScoreboard() {
     return `<div class="score-row" style="--pc:${p.color}">
       <div class="score-medal">${medal}</div>
       <div class="score-player">
-        <div class="score-name">${TEAM_NAMES[p.id]}</div>
+        <div class="score-name">${pname(p.id)}</div>
         <div class="score-bar-wrap">
           <div class="score-bar" style="width:${pct}%"></div>
         </div>
@@ -1135,7 +1150,7 @@ function renderScoreboard() {
 // ══════════════════════════════════════════════
 
 function saveBestTime(teamId, trackName, artistName, timeMs) {
-  bestTimes.push({ team: TEAM_NAMES[teamId], color: P_COLORS[teamId], song: trackName, artist: artistName, time: timeMs });
+  bestTimes.push({ team: pname(teamId), color: P_COLORS[teamId], song: trackName, artist: artistName, time: timeMs });
   bestTimes.sort((a, b) => a.time - b.time);  // aufsteigend = schnellste zuerst
   renderBestTimes();
 }
@@ -1227,7 +1242,7 @@ function setSpotifyBlur(on) {
 // ══════════════════════════════════════════════
 function virtualBuzz(player) {
   handleBuzz(player, currentRound);
-  log(`[DEV] Buzz: ${TEAM_NAMES[player]}`, 'y');
+  log(`[DEV] Buzz: ${pname(player)}`, 'y');
 }
 
 // ══════════════════════════════════════════════
@@ -1412,7 +1427,7 @@ function renderPhoneQR() {
     const pl    = i + 1;
     const url   = `${BASE}/?player=${pl}`;
     const qr    = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&qzone=2&data=${encodeURIComponent(url)}`;
-    const label = TEAM_NAMES[pl] || `Spieler ${pl}`;
+    const label = pname(pl);
     const color = P_COLORS[pl]  || '#fff';
     const dotCls = phoneOnline[pl] ? 'qr-dot ok' : 'qr-dot';
     const status = phoneOnline[pl] ? 'Online' : 'Getrennt';
@@ -1436,6 +1451,28 @@ function updatePhoneDot(player) {
   if (lbl) lbl.textContent = phoneOnline[player] ? 'Online' : 'Getrennt';
 }
 
+// Namen-Update live in alle sichtbaren UI-Elemente schreiben
+function updatePlayerNameUI(player, name) {
+  // Badge im Spielerstatus (wenn nicht gerade aktiv/gesperrt)
+  const badge = document.getElementById(`p${player}`);
+  if (badge && !badge.classList.contains('active') && !badge.classList.contains('locked')) {
+    badge.textContent = name;
+  }
+  // Label im QR-Grid (Smartphone-Modus)
+  const qrLabel = document.querySelector(`.qr-item:nth-child(${player}) .qr-team`);
+  // Einfacher: alle qr-team spans durchsuchen und passendes updaten
+  document.querySelectorAll('.qr-item').forEach((item, i) => {
+    if (i + 1 === player) {
+      const t = item.querySelector('.qr-team');
+      if (t) t.textContent = name;
+    }
+  });
+  // Scoreboard neu rendern (zeigt aktualisierte Namen)
+  renderScoreboard();
+  // Virtuelle Buzzer-Buttons updaten
+  renderVirtualBuzzers();
+}
+
 // ══════════════════════════════════════════════
 //  VIRTUELLE BUZZER – dynamisch nach Spieleranzahl
 // ══════════════════════════════════════════════
@@ -1448,7 +1485,7 @@ function renderVirtualBuzzers() {
     const id  = i + 1;
     const bg  = P_COLORS[id] || '#fff';
     const fg  = P_TEXT[id]   || '#000';
-    const lbl = TEAM_NAMES[id] || `Spieler ${id}`;
+    const lbl = pname(id);
     return `<button class="vbuzz" style="background:${bg};color:${fg}"
               onclick="virtualBuzz(${id})">● ${lbl}</button>`;
   }).join('');
