@@ -51,23 +51,21 @@
         grid-template-columns: 1fr 1fr;
         grid-template-areas:
           "title      title"
-          "spotify    controls"
-          "spotify    players"
+          "controls   players"
           "scores     besttimes"
-          "dev        connections"
-          "log        log";
+          "spotify    connections"
+          "dev        log";
         align-items: start;
       }
       #app-title        { grid-area: title; }
-      #card-spotify     { grid-area: spotify; }
       #card-controls    { grid-area: controls; }
       #card-players     { grid-area: players; }
       #card-scores      { grid-area: scores; }
       #card-besttimes   { grid-area: besttimes; }
-      #card-dev         { grid-area: dev; }
+      #card-spotify     { grid-area: spotify; }
       #card-connections { grid-area: connections; }
+      #card-dev         { grid-area: dev; }
       #card-log         { grid-area: log; }
-      #spotify-art { width: clamp(180px, 38%, 280px) !important; height: clamp(180px, 38%, 280px) !important; }
     }
 
     h1 { text-align: center; font-size: 1.6rem; font-weight: 700; color: var(--yellow); letter-spacing: .08em; padding: 8px 0 4px; }
@@ -296,30 +294,6 @@
 <div id="app">
   <h1 id="app-title">🎵 Song Quiz</h1>
 
-  <!-- ── Spotify ── -->
-  <div class="card" id="card-spotify">
-    <div class="card-title">Spotify</div>
-    <div class="status-row">
-      <div class="dot" id="sp-dot"></div>
-      <span id="sp-label">Nicht eingeloggt</span>
-    </div>
-    <div id="spotify-now" style="display:none">
-      <img id="spotify-art" src="" alt="" />
-      <div id="spotify-info">
-        <div id="spotify-track">—</div>
-        <div id="spotify-artist">—</div>
-        <div id="prog-wrap" onclick="seekSpotify(event)">
-          <div id="prog-bar"></div>
-        </div>
-        <div class="time-row"><span id="t-cur">0:00</span><span id="t-dur">0:00</span></div>
-      </div>
-    </div>
-    <div id="sp-blur-hint">🔒 Titel verborgen – wird nach richtigem Buzzer aufgedeckt</div>
-    <div class="btn-row" style="margin-top:12px">
-      <button class="btn-spotify" id="btn-sp-login" onclick="spotifyLogin()">🎵 Mit Spotify einloggen</button>
-    </div>
-  </div>
-
   <!-- ── Spielsteuerung ── -->
   <div class="card" id="card-controls">
     <div class="card-title">Spielsteuerung</div>
@@ -346,13 +320,11 @@
   <!-- ── Spielerstatus ── -->
   <div class="card" id="card-players">
     <div class="card-title" id="players-title">Spielerstatus – Hardware-Buzzer</div>
-    <!-- Hardware-Modus: 4 feste Badges -->
-    <div id="hw-players">
-      <div id="player-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px"></div>
-    </div>
+    <!-- Spieler-Badges: immer sichtbar (Hardware + Smartphone) -->
+    <div id="player-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px"></div>
     <!-- Smartphone-Modus: Spielerzahl + QR-Codes mit Online-Status -->
     <div id="sm-players" style="display:none">
-      <div id="sm-count-row">
+      <div id="sm-count-row" style="margin-top:12px">
         <label for="sm-count">Spieler:</label>
         <select id="sm-count" onchange="onPlayerCountChange()">
           <option value="2">2</option>
@@ -384,6 +356,30 @@
     <div class="card-title">⚡ Schnellste Erkennungen</div>
     <div id="best-times-list">
       <div class="btime-empty">Noch keine Wertung – erkenne den ersten Song!</div>
+    </div>
+  </div>
+
+  <!-- ── Spotify ── -->
+  <div class="card" id="card-spotify">
+    <div class="card-title">Spotify</div>
+    <div class="status-row">
+      <div class="dot" id="sp-dot"></div>
+      <span id="sp-label">Nicht eingeloggt</span>
+    </div>
+    <div id="spotify-now" style="display:none">
+      <img id="spotify-art" src="" alt="" />
+      <div id="spotify-info">
+        <div id="spotify-track">—</div>
+        <div id="spotify-artist">—</div>
+        <div id="prog-wrap" onclick="seekSpotify(event)">
+          <div id="prog-bar"></div>
+        </div>
+        <div class="time-row"><span id="t-cur">0:00</span><span id="t-dur">0:00</span></div>
+      </div>
+    </div>
+    <div id="sp-blur-hint">🔒 Titel verborgen – wird nach richtigem Buzzer aufgedeckt</div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn-spotify" id="btn-sp-login" onclick="spotifyLogin()">🎵 Mit Spotify einloggen</button>
     </div>
   </div>
 
@@ -1389,19 +1385,18 @@ function switchMode(mode) {
   const isHw = mode === 'hardware';
   document.getElementById('btn-mode-hw').classList.toggle('active', isHw);
   document.getElementById('btn-mode-sm').classList.toggle('active', !isHw);
-  document.getElementById('hw-players').style.display  = isHw ? '' : 'none';
   document.getElementById('sm-players').style.display  = isHw ? 'none' : '';
   document.getElementById('players-title').textContent =
     isHw ? 'Spielerstatus – Hardware-Buzzer' : 'Smartphone-Buzzer';
 
   if (isHw) {
     gameNumPlayers = 4;
-    renderPlayerGrid();
   } else {
     const sel = document.getElementById('sm-count');
     gameNumPlayers = parseInt(sel?.value) || 4;
     renderPhoneQR();
   }
+  renderPlayerGrid();   // immer – zeigt N Badges je nach Modus
   renderVirtualBuzzers();
   renderScoreboard();
 }
