@@ -458,6 +458,7 @@ let scores = [0,0,0,0,0,0,0,0,0]; // index 0 unused, 1–8
 let gameNumPlayers = 4;           // aktive Spieleranzahl
 let lockedPlayers = new Set();
 let selectedDeviceId = null;
+let lastSentSongTitle = '';   // verhindert Doppel-Sends beim Polling
 
 // ─── Bestzeiten ────────────────────────────────────────────────────────────
 let roundStartTime   = 0;   // Date.now() kurz nach Song-Start
@@ -722,6 +723,7 @@ async function fetchNowPlaying() {
   document.getElementById('spotify-track').textContent  = name;
   document.getElementById('spotify-artist').textContent = artists;
   document.getElementById('spotify-now').style.display  = 'flex';
+  sendSongTitle(name + ' \u2013 ' + artists);   // → Basis-Display
 
   currentProgress = data.progress_ms || 0;
   currentDuration = track.duration_ms || 1;
@@ -746,6 +748,7 @@ function updateProgress() {
 function resetNowPlaying() {
   document.getElementById('spotify-now').style.display = 'none';
   clearInterval(progressTimer); progressTimer = null;
+  sendSongTitle('');   // Basis-Display: "kein Song"
 }
 
 function fmtMs(ms) {
@@ -783,6 +786,14 @@ async function bleConnect() {
     document.getElementById('btn-start').disabled   = false;
     document.getElementById('btn-reset').disabled   = false;
     log('BLE verbunden', 'g');
+
+    // Aktuellen Song sofort ans Display senden – nicht auf naechsten 5-s-Poll warten
+    lastSentSongTitle = '';   // force resend (sonst wird bei gleichem Titel geblockt)
+    const curTrack  = document.getElementById('spotify-track')?.textContent?.trim();
+    const curArtist = document.getElementById('spotify-artist')?.textContent?.trim();
+    if (curTrack && curTrack !== '—') {
+      sendSongTitle(curTrack + ' \u2013 ' + curArtist);
+    }
   } catch(e) {
     setBleDot('err', 'Verbindung fehlgeschlagen');
     log('BLE Fehler: ' + e.message, 'y');
@@ -834,6 +845,23 @@ async function sendByte(b) {
   if (!ctrlChr) return;
   try { await ctrlChr.writeValueWithoutResponse(new Uint8Array([b])); }
   catch(e) { log('BLE senden fehlgeschlagen: '+e.message,'y'); }
+}
+
+// Song-Titel an Basis-Display senden (BLE Befehl 0x05 + UTF-8-String)
+async function sendSongTitle(title) {
+  if (!ctrlChr) return;
+  // Nur ASCII senden – Montserrat-Font auf dem Display kennt keine Umlaute/Sonderzeichen
+  const t = (title || '').replace(/[^\x20-\x7E]/g, '?').substring(0, 60);
+  if (t === lastSentSongTitle) return;   // nur senden wenn geaendert
+  lastSentSongTitle = t;
+  try {
+    // TextEncoder korrekt verwenden: encoded.length != t.length bei Sonderzeichen
+    const encoded = new TextEncoder().encode(t);
+    const payload = new Uint8Array(1 + encoded.length);
+    payload[0] = 0x05;
+    payload.set(encoded, 1);
+    await ctrlChr.writeValueWithoutResponse(payload);
+  } catch(e) { /* silent – Display ist optional */ }
 }
 
 // ══════════════════════════════════════════════
