@@ -50,22 +50,25 @@
         max-width: 980px;
         grid-template-columns: 1fr 1fr;
         grid-template-areas:
-          "title      title"
-          "controls   players"
-          "scores     besttimes"
-          "spotify    connections"
-          "dev        log";
+          "title       title"
+          "controls    spotify"
+          "players     spotify"
+          "scores      besttimes"
+          "connections dev"
+          "log         log";
         align-items: start;
       }
       #app-title        { grid-area: title; }
       #card-controls    { grid-area: controls; }
+      #card-spotify     { grid-area: spotify; }
       #card-players     { grid-area: players; }
       #card-scores      { grid-area: scores; }
       #card-besttimes   { grid-area: besttimes; }
-      #card-spotify     { grid-area: spotify; }
       #card-connections { grid-area: connections; }
       #card-dev         { grid-area: dev; }
       #card-log         { grid-area: log; }
+      /* Spotify-Art im 2-Zeilen-Span größer darstellen */
+      #spotify-art { width: clamp(160px, 38%, 260px) !important; height: clamp(160px, 38%, 260px) !important; }
     }
 
     h1 { text-align: center; font-size: 1.6rem; font-weight: 700; color: var(--yellow); letter-spacing: .08em; padding: 8px 0 4px; }
@@ -317,6 +320,30 @@
     </div>
   </div>
 
+  <!-- ── Spotify ── -->
+  <div class="card" id="card-spotify">
+    <div class="card-title">Spotify</div>
+    <div class="status-row">
+      <div class="dot" id="sp-dot"></div>
+      <span id="sp-label">Nicht eingeloggt</span>
+    </div>
+    <div id="spotify-now" style="display:none">
+      <img id="spotify-art" src="" alt="" />
+      <div id="spotify-info">
+        <div id="spotify-track">—</div>
+        <div id="spotify-artist">—</div>
+        <div id="prog-wrap" onclick="seekSpotify(event)">
+          <div id="prog-bar"></div>
+        </div>
+        <div class="time-row"><span id="t-cur">0:00</span><span id="t-dur">0:00</span></div>
+      </div>
+    </div>
+    <div id="sp-blur-hint">🔒 Titel verborgen – wird nach richtigem Buzzer aufgedeckt</div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn-spotify" id="btn-sp-login" onclick="spotifyLogin()">🎵 Mit Spotify einloggen</button>
+    </div>
+  </div>
+
   <!-- ── Spielerstatus ── -->
   <div class="card" id="card-players">
     <div class="card-title" id="players-title">Spielerstatus – Hardware-Buzzer</div>
@@ -359,36 +386,6 @@
     </div>
   </div>
 
-  <!-- ── Spotify ── -->
-  <div class="card" id="card-spotify">
-    <div class="card-title">Spotify</div>
-    <div class="status-row">
-      <div class="dot" id="sp-dot"></div>
-      <span id="sp-label">Nicht eingeloggt</span>
-    </div>
-    <div id="spotify-now" style="display:none">
-      <img id="spotify-art" src="" alt="" />
-      <div id="spotify-info">
-        <div id="spotify-track">—</div>
-        <div id="spotify-artist">—</div>
-        <div id="prog-wrap" onclick="seekSpotify(event)">
-          <div id="prog-bar"></div>
-        </div>
-        <div class="time-row"><span id="t-cur">0:00</span><span id="t-dur">0:00</span></div>
-      </div>
-    </div>
-    <div id="sp-blur-hint">🔒 Titel verborgen – wird nach richtigem Buzzer aufgedeckt</div>
-    <div class="btn-row" style="margin-top:12px">
-      <button class="btn-spotify" id="btn-sp-login" onclick="spotifyLogin()">🎵 Mit Spotify einloggen</button>
-    </div>
-  </div>
-
-  <!-- ── Virtuelle Buzzer (Dev) ── -->
-  <div class="card" id="card-dev">
-    <div class="card-title">Virtuelle Buzzer (Dev-Modus)</div>
-    <div id="dev-grid"></div>
-  </div>
-
   <!-- ── Verbindungen (BLE + Spotify-Gerät + Logout) ── -->
   <div class="card" id="card-connections">
     <div class="card-title">BuzzQuiz Board</div>
@@ -411,6 +408,12 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- ── Virtuelle Buzzer (Dev) ── -->
+  <div class="card" id="card-dev">
+    <div class="card-title">Virtuelle Buzzer (Dev-Modus)</div>
+    <div id="dev-grid"></div>
   </div>
 
   <!-- ── Log ── -->
