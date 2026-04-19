@@ -17,10 +17,6 @@
       --green:   #00e050;
       --red:     #ff3030;
       --blue:    #40a0ff;
-      --p1: #40a0ff; --p1t: #000;
-      --p2: #00e050; --p2t: #000;
-      --p3: #ff3030; --p3t: #fff;
-      --p4: #ffe000; --p4t: #000;
     }
 
     html, body {
@@ -31,20 +27,11 @@
 
     #app { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 16px; max-width: 540px; margin: 0 auto; }
 
-    /* ── Smartphone-Modus ── */
-    #sm-controls { display: flex; gap: 6px; margin-bottom: 8px; }
-    #sm-controls select { flex: 1; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 7px; padding: 5px 8px; font-size: .8rem; }
-    #sm-controls select:disabled { opacity: .4; }
-    #qr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-    #qr-grid.one-col { grid-template-columns: 1fr; max-width: 160px; margin-left: auto; margin-right: auto; }
-    .qr-item  { display: flex; flex-direction: column; align-items: center; gap: 5px;
-                background: var(--bg); border-radius: 10px; padding: 10px 6px; }
-    .qr-item img  { width: 110px; height: 110px; border-radius: 6px; display: block; }
-    .qr-team  { font-size: .78rem; font-weight: 700; }
-    .qr-conn  { font-size: .68rem; color: var(--muted); display: flex; align-items: center; gap: 4px; }
-    .qr-dot   { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
-    .qr-dot.ok { background: var(--green); }
-    #phone-status { font-size: .78rem; color: var(--muted); margin: 6px 0 2px; word-break: break-all; }
+    /* ── Smartphone-Modus: Spielerzahl-Auswahl ── */
+    #sm-count-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    #sm-count-row select { background: var(--bg); color: var(--text); border: 1.5px solid var(--border);
+                           border-radius: 8px; padding: 5px 10px; font-size: .88rem; }
+    #sm-count-row label { font-size: .82rem; color: var(--muted); }
 
     /* ── Bestzeiten-Karte ── */
     #best-times-list { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
@@ -189,6 +176,21 @@
     /* ── Spieler-Grid ── */
     .pbadge.locked { opacity: .35; text-decoration: line-through; }
 
+    /* ── Modus-Toggle ── */
+    .mode-btn { font-size: .82rem; padding: 8px 12px; border-radius: 9px;
+                background: var(--border); color: var(--muted); font-weight: 600; border: 1.5px solid transparent; }
+    .mode-btn.active { background: var(--yellow); color: #000; border-color: transparent; }
+
+    /* ── QR-Grid (Smartphone-Modus) ── */
+    #qr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-top: 8px; }
+    .qr-item  { display: flex; flex-direction: column; align-items: center; gap: 5px;
+                background: var(--bg); border-radius: 10px; padding: 10px 6px; border: 1.5px solid var(--border); }
+    .qr-item img  { width: 110px; height: 110px; border-radius: 6px; display: block; }
+    .qr-team  { font-size: .78rem; font-weight: 700; }
+    .qr-conn  { font-size: .68rem; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+    .qr-dot   { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+    .qr-dot.ok { background: var(--green); }
+
     /* ── Spotify Blur ── */
     #spotify-art, #spotify-track, #spotify-artist { transition: filter .55s ease; }
     #spotify-now.sp-hidden #spotify-art    { filter: blur(22px); }
@@ -321,6 +323,11 @@
   <!-- ── Spielsteuerung ── -->
   <div class="card" id="card-controls">
     <div class="card-title">Spielsteuerung</div>
+    <!-- Modus-Umschalter -->
+    <div class="btn-row" style="margin-bottom:12px">
+      <button id="btn-mode-hw" class="mode-btn active" onclick="switchMode('hardware')">🎮 Hardware-Buzzer</button>
+      <button id="btn-mode-sm" class="mode-btn"        onclick="switchMode('smartphone')">📱 Smartphone-Modus</button>
+    </div>
     <div id="round-num">Runde 1</div>
     <div class="btn-row">
       <button class="btn-yellow" id="btn-start" onclick="startRound()" disabled>▶ Neue Runde</button>
@@ -338,8 +345,32 @@
 
   <!-- ── Spielerstatus ── -->
   <div class="card" id="card-players">
-    <div class="card-title">Spielerstatus</div>
-    <div id="player-grid"></div>
+    <div class="card-title" id="players-title">Spielerstatus – Hardware-Buzzer</div>
+    <!-- Hardware-Modus: 4 feste Badges -->
+    <div id="hw-players">
+      <div id="player-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px"></div>
+    </div>
+    <!-- Smartphone-Modus: Spielerzahl + QR-Codes mit Online-Status -->
+    <div id="sm-players" style="display:none">
+      <div id="sm-count-row">
+        <label for="sm-count">Spieler:</label>
+        <select id="sm-count" onchange="onPlayerCountChange()">
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4" selected>4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+        </select>
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:8px;line-height:1.4">
+        WLAN <strong style="color:var(--text)">BuzzQuiz</strong> verbinden (kein Passwort), dann QR-Code scannen.
+      </div>
+      <div id="qr-grid"></div>
+    </div>
   </div>
 
   <!-- ── Punktestand ── -->
@@ -359,12 +390,7 @@
   <!-- ── Virtuelle Buzzer (Dev) ── -->
   <div class="card" id="card-dev">
     <div class="card-title">Virtuelle Buzzer (Dev-Modus)</div>
-    <div id="dev-grid">
-      <button class="vbuzz" style="background:var(--p1);color:var(--p1t)" onclick="virtualBuzz(1)">● Team Blau</button>
-      <button class="vbuzz" style="background:var(--p2);color:var(--p2t)" onclick="virtualBuzz(2)">● Team Grün</button>
-      <button class="vbuzz" style="background:var(--p3);color:var(--p3t)" onclick="virtualBuzz(3)">● Team Rot</button>
-      <button class="vbuzz" style="background:var(--p4);color:var(--p4t)" onclick="virtualBuzz(4)">● Team Gelb</button>
-    </div>
+    <div id="dev-grid"></div>
   </div>
 
   <!-- ── Verbindungen (BLE + Spotify-Gerät + Logout) ── -->
@@ -389,27 +415,6 @@
       </div>
     </div>
 
-    <!-- ── Handy-Buzzer (WiFi-AP) ── -->
-    <div style="margin-top:14px; border-top:1px solid var(--border); padding-top:12px">
-      <div class="card-title" style="margin-bottom:6px">📱 Handy-Buzzer</div>
-      <div style="font-size:.78rem;color:var(--muted);margin-bottom:10px;line-height:1.4">
-        Handys mit WLAN <strong style="color:var(--text)">BuzzQuiz</strong> verbinden
-        (kein Passwort), dann QR-Code scannen.
-      </div>
-      <div id="sm-controls">
-        <select id="sm-count" onchange="renderPhoneQR()">
-          <option value="1">1 Spieler</option>
-          <option value="2">2 Spieler</option>
-          <option value="3">3 Spieler</option>
-          <option value="4" selected>4 Spieler</option>
-          <option value="5">5 Spieler</option>
-          <option value="6">6 Spieler</option>
-          <option value="7">7 Spieler</option>
-          <option value="8">8 Spieler</option>
-        </select>
-      </div>
-      <div id="qr-grid" style="margin-top:10px"></div>
-    </div>
   </div>
 
   <!-- ── Log ── -->
@@ -431,9 +436,9 @@ const SVC_UUID     = '0000ff00-0000-1000-8000-00805f9b34fb';
 const NOTIFY_UUID  = '0000ff01-0000-1000-8000-00805f9b34fb';
 const CTRL_UUID    = '0000ff02-0000-1000-8000-00805f9b34fb';
 
-const P_COLORS   = ['','#40a0ff','#00e050','#ff3030','#ffe000','#b060ff','#ff8800','#ff40c0','#00d0d0'];
-const P_TEXT     = ['','#000',   '#000',   '#fff',   '#000',   '#fff',   '#000',   '#000',   '#000'  ];
-const TEAM_NAMES = ['','Team Blau','Team Grün','Team Rot','Team Gelb','Team Lila','Team Orange','Team Pink','Team Cyan'];
+const P_COLORS   = ['','#40a0ff','#00e050','#ff3030','#ffe000','#b060ff','#ff8800','#ff40c0','#00d0d0','#40ffb0','#ff6040'];
+const P_TEXT     = ['','#000',   '#000',   '#fff',   '#000',   '#fff',   '#000',   '#000',   '#000',   '#000',   '#fff'  ];
+const TEAM_NAMES = ['','Team Blau','Team Grün','Team Rot','Team Gelb','Team Lila','Team Orange','Team Pink','Team Cyan','Team Mint','Team Koralle'];
 
 // ══════════════════════════════════════════════
 //  STATE
@@ -448,8 +453,10 @@ let progressTimer = null;
 let currentProgress = 0;
 let currentDuration = 0;
 let currentBuzzPlayer = 0;
-let scores = [0,0,0,0,0,0,0,0,0]; // index 0 unused, 1–8
-let gameNumPlayers = 4;           // aktive Spieleranzahl
+let scores = [0,0,0,0,0,0,0,0,0,0,0]; // index 0 unused, 1–10
+let gameNumPlayers = 4;               // aktive Spieleranzahl
+let gameMode = localStorage.getItem('gameMode') || 'hardware';
+let phoneOnline = new Array(11).fill(false); // phoneOnline[1..10]
 let lockedPlayers = new Set();
 let selectedDeviceId = null;
 let lastSentSongTitle = '';   // verhindert Doppel-Sends beim Polling
@@ -832,6 +839,13 @@ async function onBleNotify(e) {
     log(`✗ Falsch (Basis-Button) Spieler ${msg.player}`, 'y');
     if (msg.player) currentBuzzPlayer = msg.player;
     await onFalsch(false);   // false = kein BLE 'L' zurücksenden (vermeide Loop)
+  } else if (msg.type === 'phone') {
+    // Handy-Buzzer: Online-/Offline-Status
+    if (msg.player >= 1 && msg.player <= 10) {
+      phoneOnline[msg.player] = msg.online;
+      updatePhoneDot(msg.player);
+      log(`📱 Spieler ${msg.player}: ${msg.online ? 'online' : 'offline'}`, msg.online ? 'g' : '');
+    }
   }
 }
 
@@ -1020,7 +1034,7 @@ async function onFalsch(sendBle = true) {
   const player = currentBuzzPlayer;
 
   // Spieler sperren: 2-Byte-Befehl 'L' + player_id
-  if (sendBle && ctrlChr && player >= 1 && player <= 4) {
+  if (sendBle && ctrlChr && player >= 1 && player <= 10) {
     try {
       await ctrlChr.writeValueWithoutResponse(new Uint8Array([0x4C, player]));
       log(`→ LOCK Spieler ${player}`, 'y');
@@ -1050,36 +1064,36 @@ function updateRound() {
 function renderPlayerGrid() {
   const grid = document.getElementById('player-grid');
   if (!grid) return;
-  const isSingle = smMode === 'single';
-  const cols = gameNumPlayers <= 2 ? gameNumPlayers : 2;
+  const n    = gameMode === 'hardware' ? 4 : gameNumPlayers;
+  const cols = n <= 2 ? n : 2;
   grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-  grid.innerHTML = Array.from({length: gameNumPlayers}, (_, i) => {
+  grid.innerHTML = Array.from({length: n}, (_, i) => {
     const id    = i + 1;
-    const color = isSingle ? 'var(--muted)' : (P_COLORS[id] || '#fff');
-    const label = isSingle ? `Spieler ${id}` : (TEAM_NAMES[id] || `Team ${id}`);
+    const color = P_COLORS[id] || '#fff';
+    const label = TEAM_NAMES[id] || `Team ${id}`;
     return `<div class="pbadge" id="p${id}" style="border-color:${color}">${label}</div>`;
   }).join('');
 }
 
 function resetBadges() {
-  for (let i = 1; i <= gameNumPlayers; i++) {
+  const n = gameMode === 'hardware' ? 4 : gameNumPlayers;
+  for (let i = 1; i <= n; i++) {
     const b = document.getElementById(`p${i}`);
     if (!b) continue;
     b.classList.remove('active', 'locked');
     b.style.background = 'var(--border)';
     b.style.color      = 'var(--muted)';
-    const isSingle = smMode === 'single';
-    b.textContent = isSingle ? `Spieler ${i}` : (TEAM_NAMES[i] || `Team ${i}`);
+    b.textContent = TEAM_NAMES[i] || `Team ${i}`;
   }
 }
 
 function updateScoreBadges() {
-  for (let i = 1; i <= gameNumPlayers; i++) {
+  const n = gameMode === 'hardware' ? 4 : gameNumPlayers;
+  for (let i = 1; i <= n; i++) {
     const b = document.getElementById(`p${i}`);
     if (!b) continue;
     if (!b.classList.contains('active') && !b.classList.contains('locked')) {
-      const isSingle = smMode === 'single';
-      b.textContent = isSingle ? `Spieler ${i}` : (TEAM_NAMES[i] || `Team ${i}`);
+      b.textContent = TEAM_NAMES[i] || `Team ${i}`;
     }
   }
   renderScoreboard();
@@ -1344,45 +1358,99 @@ function updateSpotifyUI(loggedIn) {
   log('Song Quiz bereit');
 })();
 
-// Spielerstatus und QR-Codes beim Laden rendern
+// Beim Laden: gespeicherten Modus wiederherstellen
 window.addEventListener('DOMContentLoaded', () => {
-  renderPlayerGrid();
-  renderScoreboard();
-  renderPhoneQR();   // Handy-Buzzer QR-Codes (statisch, immer sichtbar)
+  switchMode(gameMode);   // initialisiert Player-Grid, QR-Codes und Dev-Buzzer
 });
 
 // ══════════════════════════════════════════════
-//  HANDY-BUZZER (WiFi-AP, kein MQTT)
+//  MODUS-UMSCHALTER
 // ══════════════════════════════════════════════
 
-let smMode = 'team';   // fest: Team-Modus
+function switchMode(mode) {
+  gameMode = mode;
+  localStorage.setItem('gameMode', mode);
 
-// QR-Codes fuer Handy-Buzzer rendern (statische URLs zum ESP32-AP)
-function renderPhoneQR() {
+  const isHw = mode === 'hardware';
+  document.getElementById('btn-mode-hw').classList.toggle('active', isHw);
+  document.getElementById('btn-mode-sm').classList.toggle('active', !isHw);
+  document.getElementById('hw-players').style.display  = isHw ? '' : 'none';
+  document.getElementById('sm-players').style.display  = isHw ? 'none' : '';
+  document.getElementById('players-title').textContent =
+    isHw ? 'Spielerstatus – Hardware-Buzzer' : 'Smartphone-Buzzer';
+
+  if (isHw) {
+    gameNumPlayers = 4;
+    renderPlayerGrid();
+  } else {
+    const sel = document.getElementById('sm-count');
+    gameNumPlayers = parseInt(sel?.value) || 4;
+    renderPhoneQR();
+  }
+  renderVirtualBuzzers();
+  renderScoreboard();
+}
+
+function onPlayerCountChange() {
   const count = parseInt(document.getElementById('sm-count')?.value) || 4;
   gameNumPlayers = count;
-  renderPlayerGrid();
+  renderPhoneQR();
+  renderVirtualBuzzers();
   renderScoreboard();
+}
 
+// ══════════════════════════════════════════════
+//  HANDY-BUZZER – QR-Codes + Online-Status
+// ══════════════════════════════════════════════
+
+function renderPhoneQR() {
   const grid = document.getElementById('qr-grid');
   if (!grid) return;
 
-  // Zwei Spalten ausser bei nur 1 Spieler
-  grid.className = count === 1 ? 'one-col' : '';
-
   const BASE = 'http://192.168.4.1';
-  grid.innerHTML = Array.from({ length: count }, (_, i) => {
+  grid.innerHTML = Array.from({ length: gameNumPlayers }, (_, i) => {
     const pl    = i + 1;
     const url   = `${BASE}/?player=${pl}`;
     const qr    = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&qzone=2&data=${encodeURIComponent(url)}`;
     const label = TEAM_NAMES[pl] || `Spieler ${pl}`;
     const color = P_COLORS[pl]  || '#fff';
+    const dotCls = phoneOnline[pl] ? 'qr-dot ok' : 'qr-dot';
+    const status = phoneOnline[pl] ? 'Online' : 'Getrennt';
     return `<div class="qr-item">
       <a href="${url}" target="_blank" rel="noopener">
-        <img src="${qr}" alt="${label}" loading="lazy" style="width:110px;height:110px;border-radius:6px">
+        <img src="${qr}" alt="${label}" loading="lazy">
       </a>
       <div class="qr-team" style="color:${color}">${label}</div>
+      <div class="qr-conn">
+        <div class="${dotCls}" id="phone-dot-${pl}"></div>
+        <span id="phone-status-${pl}">${status}</span>
+      </div>
     </div>`;
+  }).join('');
+}
+
+function updatePhoneDot(player) {
+  const dot = document.getElementById(`phone-dot-${player}`);
+  const lbl = document.getElementById(`phone-status-${player}`);
+  if (dot) dot.className = phoneOnline[player] ? 'qr-dot ok' : 'qr-dot';
+  if (lbl) lbl.textContent = phoneOnline[player] ? 'Online' : 'Getrennt';
+}
+
+// ══════════════════════════════════════════════
+//  VIRTUELLE BUZZER – dynamisch nach Spieleranzahl
+// ══════════════════════════════════════════════
+
+function renderVirtualBuzzers() {
+  const n    = gameMode === 'hardware' ? 4 : gameNumPlayers;
+  const grid = document.getElementById('dev-grid');
+  if (!grid) return;
+  grid.innerHTML = Array.from({length: n}, (_, i) => {
+    const id  = i + 1;
+    const bg  = P_COLORS[id] || '#fff';
+    const fg  = P_TEXT[id]   || '#000';
+    const lbl = TEAM_NAMES[id] || `Spieler ${id}`;
+    return `<button class="vbuzz" style="background:${bg};color:${fg}"
+              onclick="virtualBuzz(${id})">● ${lbl}</button>`;
   }).join('');
 }
 </script>
