@@ -723,7 +723,7 @@ async function fetchNowPlaying() {
   document.getElementById('spotify-track').textContent  = name;
   document.getElementById('spotify-artist').textContent = artists;
   document.getElementById('spotify-now').style.display  = 'flex';
-  sendSongTitle(name + ' \u2013 ' + artists);   // → Basis-Display
+  sendSongTitle(name, artists);   // → Basis-Display (Titel | Interpret)
 
   currentProgress = data.progress_ms || 0;
   currentDuration = track.duration_ms || 1;
@@ -748,7 +748,7 @@ function updateProgress() {
 function resetNowPlaying() {
   document.getElementById('spotify-now').style.display = 'none';
   clearInterval(progressTimer); progressTimer = null;
-  sendSongTitle('');   // Basis-Display: "kein Song"
+  sendSongTitle('', '');   // Basis-Display: "kein Song"
 }
 
 function fmtMs(ms) {
@@ -792,7 +792,7 @@ async function bleConnect() {
     const curTrack  = document.getElementById('spotify-track')?.textContent?.trim();
     const curArtist = document.getElementById('spotify-artist')?.textContent?.trim();
     if (curTrack && curTrack !== '—') {
-      sendSongTitle(curTrack + ' \u2013 ' + curArtist);
+      sendSongTitle(curTrack, curArtist || '');
     }
   } catch(e) {
     setBleDot('err', 'Verbindung fehlgeschlagen');
@@ -847,16 +847,17 @@ async function sendByte(b) {
   catch(e) { log('BLE senden fehlgeschlagen: '+e.message,'y'); }
 }
 
-// Song-Titel an Basis-Display senden (BLE Befehl 0x05 + UTF-8-String)
-async function sendSongTitle(title) {
+// Song-Info an Basis-Display senden (BLE Befehl 0x05, Format: "Titel|Interpret")
+// Nur ASCII – Montserrat-Font kennt keine Umlaute/Sonderzeichen
+async function sendSongTitle(track, artist) {
   if (!ctrlChr) return;
-  // Nur ASCII senden – Montserrat-Font auf dem Display kennt keine Umlaute/Sonderzeichen
-  const t = (title || '').replace(/[^\x20-\x7E]/g, '?').substring(0, 60);
-  if (t === lastSentSongTitle) return;   // nur senden wenn geaendert
-  lastSentSongTitle = t;
+  const t = (track  || '').replace(/[^\x20-\x7E]/g, '?').substring(0, 40);
+  const a = (artist || '').replace(/[^\x20-\x7E]/g, '?').substring(0, 38);
+  const combined = t + (a ? '|' + a : '');
+  if (combined === lastSentSongTitle) return;   // nur senden wenn geaendert
+  lastSentSongTitle = combined;
   try {
-    // TextEncoder korrekt verwenden: encoded.length != t.length bei Sonderzeichen
-    const encoded = new TextEncoder().encode(t);
+    const encoded = new TextEncoder().encode(combined);
     const payload = new Uint8Array(1 + encoded.length);
     payload[0] = 0x05;
     payload.set(encoded, 1);
