@@ -389,32 +389,26 @@
       </div>
     </div>
 
-    <!-- ── Smartphone-Modus ── -->
+    <!-- ── Handy-Buzzer (WiFi-AP) ── -->
     <div style="margin-top:14px; border-top:1px solid var(--border); padding-top:12px">
-      <div class="card-title" style="margin-bottom:8px">📱 Smartphone-Modus</div>
+      <div class="card-title" style="margin-bottom:6px">📱 Handy-Buzzer</div>
+      <div style="font-size:.78rem;color:var(--muted);margin-bottom:10px;line-height:1.4">
+        Handys mit WLAN <strong style="color:var(--text)">BuzzQuiz</strong> verbinden
+        (kein Passwort), dann QR-Code scannen.
+      </div>
       <div id="sm-controls">
-        <select id="sm-mode" onchange="onSmModeChange()">
-          <option value="team">Team-Modus</option>
-          <option value="single">Einzelspieler</option>
-        </select>
-        <select id="sm-count">
-          <option value="1">1 Team</option>
-          <option value="2">2 Teams</option>
-          <option value="3">3 Teams</option>
-          <option value="4" selected>4 Teams</option>
-          <option value="5">5 Teams</option>
-          <option value="6">6 Teams</option>
-          <option value="7">7 Teams</option>
-          <option value="8">8 Teams</option>
+        <select id="sm-count" onchange="renderPhoneQR()">
+          <option value="1">1 Spieler</option>
+          <option value="2">2 Spieler</option>
+          <option value="3">3 Spieler</option>
+          <option value="4" selected>4 Spieler</option>
+          <option value="5">5 Spieler</option>
+          <option value="6">6 Spieler</option>
+          <option value="7">7 Spieler</option>
+          <option value="8">8 Spieler</option>
         </select>
       </div>
-      <button class="btn-outline" id="btn-phone-mode" onclick="activatePhoneMode()" style="width:100%">
-        Aktivieren (kein Board nötig)
-      </button>
-      <div id="phone-panel" style="display:none">
-        <div id="phone-status"></div>
-        <div id="qr-grid"></div>
-      </div>
+      <div id="qr-grid" style="margin-top:10px"></div>
     </div>
   </div>
 
@@ -889,7 +883,6 @@ async function startRound() {
   await spotifyNext();
   roundStartTime = Date.now();   // Zeitmessung startet mit dem Song
   sendByte(0x53); // 'S' → START (physische Buzzer)
-  smBroadcast({ type: 'start' }); // Smartphone-Buzzer freigeben
   log(`→ START Runde ${currentRound}`, 'g');
 }
 
@@ -935,7 +928,6 @@ function fullGameReset() {
   pendingBuzzTime   = 0;
   lockedPlayers.clear();
   sendByte(0x52);
-  smBroadcast({ type: 'reset' });
   resetBadges();
   setSpotifyBlur(false);
   document.getElementById('round-num').textContent = 'Runde 1';
@@ -946,7 +938,6 @@ function fullGameReset() {
 
 function resetRound() {
   sendByte(0x52); // 'R' → physische Buzzer zurücksetzen
-  smBroadcast({ type: 'reset' }); // Smartphone-Buzzer zurücksetzen
   lockedPlayers.clear();
   resetBadges();
   setSpotifyBlur(false);   // Song-Titel aufdecken (Auflösung)
@@ -1019,7 +1010,6 @@ async function onRichtig(sendBle = true) {
     } catch(e) { log('BLE RESET fehlgeschlagen: '+e.message, 'y'); }
   }
   await resumeSpotify();
-  smBroadcast({ type: 'reset' }); // Alle Smartphones zurücksetzen (Runde vorbei)
   renderScoreboard();
 }
 
@@ -1036,8 +1026,6 @@ async function onFalsch(sendBle = true) {
       log(`→ LOCK Spieler ${player}`, 'y');
     } catch(e) { log('BLE senden fehlgeschlagen: '+e.message,'y'); }
   }
-  smSendTo(player, { type: 'lock' }); // Smartphone sperren
-
   lockedPlayers.add(player);
 
   // Badge als gesperrt markieren
@@ -1356,190 +1344,48 @@ function updateSpotifyUI(loggedIn) {
   log('Song Quiz bereit');
 })();
 
-// Spielerstatus sofort beim Laden rendern – unabhängig von Spotify/BLE
+// Spielerstatus und QR-Codes beim Laden rendern
 window.addEventListener('DOMContentLoaded', () => {
   renderPlayerGrid();
   renderScoreboard();
+  renderPhoneQR();   // Handy-Buzzer QR-Codes (statisch, immer sichtbar)
 });
 
 // ══════════════════════════════════════════════
-//  SMARTPHONE-MODUS  (MQTT über WebSocket)
+//  HANDY-BUZZER (WiFi-AP, kein MQTT)
 // ══════════════════════════════════════════════
 
-let mqttClient = null;
-let mqttRoomId = null;
-let smOnline   = {};   // { playerId: bool }
-let smMode     = 'team';
-let smCount    = 4;
+let smMode = 'team';   // fest: Team-Modus
 
-// Broker-Liste: primär EMQX, Fallback auf Mosquitto, dann HiveMQ
-const MQTT_BROKERS = [
-  'wss://broker.emqx.io:8084/mqtt',
-  'wss://test.mosquitto.org:8081/mqtt',
-  'wss://broker.hivemq.com:8884/mqtt',
-];
-
-// Mode-Selektor: Team-Anzahl bei Einzelspieler ausblenden
-function onSmModeChange() {
-  const mode = document.getElementById('sm-mode').value;
-  document.getElementById('sm-count').disabled = (mode === 'single');
-}
-
-function activatePhoneMode() {
-  if (mqttClient) return;
-
-  smMode  = document.getElementById('sm-mode').value;
-  smCount = smMode === 'single' ? 1 : parseInt(document.getElementById('sm-count').value);
-  gameNumPlayers = smCount;
+// QR-Codes fuer Handy-Buzzer rendern (statische URLs zum ESP32-AP)
+function renderPhoneQR() {
+  const count = parseInt(document.getElementById('sm-count')?.value) || 4;
+  gameNumPlayers = count;
   renderPlayerGrid();
   renderScoreboard();
 
-  const btn = document.getElementById('btn-phone-mode');
-  btn.disabled    = true;
-  btn.textContent = '📱 Verbinde…';
-  document.getElementById('sm-mode').disabled  = true;
-  document.getElementById('sm-count').disabled = true;
-
-  // Zufälligen 6-stelligen Raum-Code erzeugen
-  mqttRoomId = Math.random().toString(36).slice(2, 8).toUpperCase();
-
-  const clientId  = 'bq_mod_' + Math.random().toString(36).slice(2, 10);
-  const buzzTopic = `buzzquiz/${mqttRoomId}/buzz`;
-  let panelShown  = false;
-
-  function tryBroker(idx) {
-    if (idx >= MQTT_BROKERS.length) {
-      log('📱 Alle Broker fehlgeschlagen – WLAN prüfen', 'y');
-      btn.disabled    = false;
-      btn.textContent = 'Aktivieren (kein Board nötig)';
-      document.getElementById('sm-mode').disabled  = false;
-      document.getElementById('sm-count').disabled = false;
-      mqttClient = null;
-      return;
-    }
-    const broker = MQTT_BROKERS[idx];
-    log(`📱 Verbinde mit ${broker.replace('wss://','').split('/')[0]}…`);
-
-    const failTimer = setTimeout(() => {
-      log(`📱 Timeout – versuche nächsten Broker`, 'y');
-      try { mqttClient.end(true); } catch {}
-      tryBroker(idx + 1);
-    }, 12000);
-
-    mqttClient = mqtt.connect(broker, {
-      clientId,
-      clean:           true,
-      connectTimeout:  10000,
-      reconnectPeriod: 0,
-      protocolVersion: 4,
-    });
-
-    mqttClient.on('connect', () => {
-      clearTimeout(failTimer);
-      mqttClient.subscribe(buzzTopic, { qos: 0 }, err => {
-        if (err) { log('📱 Subscribe fehlgeschlagen', 'y'); return; }
-        if (!panelShown) {
-          panelShown = true;
-          log('📱 Smartphone-Modus aktiv', 'g');
-          btn.textContent = '📱 Aktiv';
-          showPhonePanel(mqttRoomId);
-          document.getElementById('btn-start').disabled = false;
-          document.getElementById('btn-reset').disabled = false;
-        } else {
-          log('📱 MQTT neu verbunden', 'g');
-        }
-      });
-
-      mqttClient.on('close', () => {
-        log('📱 MQTT Verbindung verloren – reconnect…', 'y');
-        setTimeout(() => {
-          try { mqttClient.end(true); } catch {}
-          tryBroker(idx);   // gleichen Broker erneut
-        }, 3000);
-      });
-    });
-
-    mqttClient.on('message', (topic, payload) => {
-      let msg;
-      try { msg = JSON.parse(payload.toString()); } catch { return; }
-      const pid  = msg.player;
-      const name = smMode === 'single' ? 'Spieler' : (TEAM_NAMES[pid] || `Spieler ${pid}`);
-      if (msg.type === 'hello') {
-        if (!smOnline[pid]) {
-          smOnline[pid] = true;
-          updatePhoneStatus(pid, true);
-          log(`📱 ${name} verbunden`, 'g');
-        }
-      } else if (msg.type === 'buzz') {
-        handleBuzz(pid, currentRound);
-      } else if (msg.type === 'bye') {
-        smOnline[pid] = false;
-        updatePhoneStatus(pid, false);
-        log(`📱 ${name} getrennt`, 'y');
-      }
-    });
-
-    mqttClient.on('error', e => {
-      clearTimeout(failTimer);
-      log(`📱 Broker-Fehler: ${e.message || e} → nächster`, 'y');
-      try { mqttClient.end(true); } catch {}
-      tryBroker(idx + 1);
-    });
-  }
-
-  tryBroker(0);
-}
-
-function smBroadcast(msg) {
-  if (mqttClient && mqttRoomId && mqttClient.connected) {
-    mqttClient.publish(`buzzquiz/${mqttRoomId}/cmd`, JSON.stringify(msg), { qos: 0 });
-  }
-}
-
-function smSendTo(playerId, msg) {
-  smBroadcast({ ...msg, target: playerId });
-}
-
-function showPhonePanel(roomId) {
-  const BASE    = 'https://mat41613.github.io/EDDS/buzzer.html';
-  const isSingle = smMode === 'single';
-  const count   = smCount;
-
-  document.getElementById('phone-status').textContent =
-    `🔗 Raum: ${roomId}  ·  ${isSingle ? 'Einzelspieler' : count + ' Teams'}`;
-
   const grid = document.getElementById('qr-grid');
-  grid.className = (count === 1) ? 'one-col' : '';
+  if (!grid) return;
 
-  const players = Array.from({ length: count }, (_, i) => i + 1);
-  grid.innerHTML = players.map(i => {
-    const url   = `${BASE}?room=${encodeURIComponent(roomId)}&player=${i}&mode=${smMode}`;
-    const qr    = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&qzone=2&data=${encodeURIComponent(url)}`;
-    const label = isSingle ? 'Einzelspieler' : (TEAM_NAMES[i] || `Spieler ${i}`);
-    const color = isSingle ? 'var(--fg)' : (P_COLORS[i] || '#fff');
+  // Zwei Spalten ausser bei nur 1 Spieler
+  grid.className = count === 1 ? 'one-col' : '';
+
+  const BASE = 'http://192.168.4.1';
+  grid.innerHTML = Array.from({ length: count }, (_, i) => {
+    const pl    = i + 1;
+    const url   = `${BASE}/?player=${pl}`;
+    const qr    = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&qzone=2&data=${encodeURIComponent(url)}`;
+    const label = TEAM_NAMES[pl] || `Spieler ${pl}`;
+    const color = P_COLORS[pl]  || '#fff';
     return `<div class="qr-item">
       <a href="${url}" target="_blank" rel="noopener">
-        <img src="${qr}" alt="QR ${label}" loading="lazy">
+        <img src="${qr}" alt="${label}" loading="lazy" style="width:110px;height:110px;border-radius:6px">
       </a>
       <div class="qr-team" style="color:${color}">${label}</div>
-      <div class="qr-conn">
-        <div class="qr-dot" id="qr-dot-${i}"></div>
-        <span id="qr-lbl-${i}">Warte…</span>
-      </div>
     </div>`;
   }).join('');
-
-  document.getElementById('phone-panel').style.display = 'block';
-}
-
-function updatePhoneStatus(playerId, connected) {
-  const dot = document.getElementById(`qr-dot-${playerId}`);
-  const lbl = document.getElementById(`qr-lbl-${playerId}`);
-  if (dot) dot.className = `qr-dot${connected ? ' ok' : ''}`;
-  if (lbl) lbl.textContent = connected ? 'Verbunden ✓' : 'Warte…';
 }
 </script>
 
-<script src="https://unpkg.com/mqtt@4.3.8/dist/mqtt.min.js"></script>
 </body>
 </html>
