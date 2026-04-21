@@ -874,13 +874,23 @@ async function onBleNotify(e) {
         if (parts.length > 1) {
           initSubGroup(msg.player, parts);
           playerNames[msg.player] = parts.join(' / ');
-          renderPlayerGrid();
-          renderScoreboard();
         } else {
           subGroups[msg.player] = null;
           playerNames[msg.player] = parts[0] || raw;
-          updatePlayerNameUI(msg.player, playerNames[msg.player]);
         }
+        // Immer vollständig neu rendern: Badge-IDs können sich geändert haben
+        // (z.B. Wechsel von Gruppen-Badges p2_0/p2_1 → Einzel-Badge p2).
+        // updatePlayerNameUI reicht nicht, wenn p2 im DOM noch nicht existiert.
+        renderPlayerGrid();
+        renderScoreboard();
+        renderVirtualBuzzers();
+        // QR-Grid-Label aktualisieren
+        document.querySelectorAll('.qr-item').forEach((item, i) => {
+          if (i + 1 === msg.player) {
+            const t = item.querySelector('.qr-team');
+            if (t) t.textContent = playerNames[msg.player];
+          }
+        });
         log(`✏️ Spieler ${msg.player}: ${playerNames[msg.player]}`, 'g');
       }
     }
