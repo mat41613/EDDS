@@ -441,6 +441,21 @@ const TEAM_NAMES = ['','Team Blau','Team Grün','Team Rot','Team Gelb','Team Lil
 // Spieler-Namen – werden via BLE-Notification aktualisiert wenn Handys ihren Namen senden.
 // Startet als Kopie der TEAM_NAMES (Standard-Fallback).
 let playerNames = [...TEAM_NAMES];
+// Sub-Spieler-Gruppen: null = Einzel, Array = [{name, score, locked}, …]
+let subGroups = new Array(11).fill(null);
+// Ausstehende Who-Identifikation nach Richtig/Falsch für Gruppen-Slots
+let pendingWho = { active: false, player: 0, richtig: false, trackName: '', artistName: '', buzzTime: 0 };
+
+function initSubGroup(id, parts) {
+  const existing = subGroups[id];
+  subGroups[id] = parts.map((name, si) => ({
+    name,
+    score: (existing && existing[si]) ? existing[si].score : 0,
+    locked: false,
+  }));
+}
+function isGroup(id) { return Array.isArray(subGroups[id]) && subGroups[id].length > 1; }
+
 // Hilfsfunktion: gibt den aktuellen Anzeige-Namen eines Spielers zurück
 function pname(id) { return playerNames[id] || TEAM_NAMES[id] || `Team ${id}`; }
 
@@ -855,21 +870,65 @@ async function onBleNotify(e) {
     if (msg.player >= 1 && msg.player <= 10 && msg.name) {
       const raw = String(msg.name).trim().substring(0, 40);
       if (raw) {
-        // Semikolon-getrennte Sub-Spieler hübsch als "Alice / Bob" anzeigen
         const parts = raw.split(';').map(s => s.trim()).filter(s => s);
-        const display = parts.length > 1 ? parts.join(' / ') : (parts[0] || raw);
-        playerNames[msg.player] = display;
-        updatePlayerNameUI(msg.player, display);
-        log(`✏️ Spieler ${msg.player}: ${display}`, 'g');
+        if (parts.length > 1) {
+          initSubGroup(msg.player, parts);
+          playerNames[msg.player] = parts.join(' / ');
+          renderPlayerGrid();
+          renderScoreboard();
+        } else {
+          subGroups[msg.player] = null;
+          playerNames[msg.player] = parts[0] || raw;
+          updatePlayerNameUI(msg.player, playerNames[msg.player]);
+        }
+        log(`✏️ Spieler ${msg.player}: ${playerNames[msg.player]}`, 'g');
       }
     }
   } else if (msg.type === 'who') {
-    // Individuelle Person die gebuzzert hat (nach Richtig/Falsch-Entscheidung)
+    // Individuelle Person identifiziert (nach Richtig/Falsch für Gruppen-Slot)
     if (msg.player >= 1 && msg.player <= 10 && msg.name) {
       const n = String(msg.name).trim().substring(0, 20);
-      if (n) {
-        playerNames[msg.player] = n;
-        updatePlayerNameUI(msg.player, n);
+      if (n && pendingWho.active && pendingWho.player === msg.player) {
+        const id = msg.player;
+        const group = subGroups[id];
+        if (group && group.length > 1) {
+          const si = group.findIndex(s => s.name === n);
+          if (si >= 0) {
+            if (pendingWho.richtig) {
+              // Punkt für diesen Sub-Spieler
+              group[si].score++;
+              const b = document.getElementById(`p${id}_${si}`);
+              if (b) { b.classList.remove('active'); b.textContent = `✓ ${n}`; }
+              log(`+1 Punkt für ${n} (Slot ${id}, jetzt ${group[si].score} Pkt)`, 'g');
+              if (pendingWho.buzzTime > 0 && pendingWho.trackName && pendingWho.trackName !== '—') {
+                saveBestTime(id, pendingWho.trackName, pendingWho.artistName, pendingWho.buzzTime, n);
+                log(`⚡ Bestzeit: ${(pendingWho.buzzTime/1000).toFixed(1)}s – ${pendingWho.trackName}`, 'g');
+              }
+            } else {
+              // Einzelne Person sperren, restliche zurücksetzen
+              group[si].locked = true;
+              const b = document.getElementById(`p${id}_${si}`);
+              if (b) {
+                b.style.background = 'var(--border)'; b.style.color = 'var(--muted)';
+                b.classList.remove('active'); b.classList.add('locked');
+                b.textContent = `✗ ${n}`;
+              }
+              group.forEach((sub, i) => {
+                if (i === si) return;
+                const ob = document.getElementById(`p${id}_${i}`);
+                if (ob && ob.classList.contains('active')) {
+                  ob.classList.remove('active');
+                  ob.style.background = 'var(--border)'; ob.style.color = 'var(--muted)';
+                  ob.textContent = sub.name;
+                }
+              });
+              log(`✗ ${n} gesperrt (Slot ${id})`, 'y');
+            }
+            renderScoreboard();
+          }
+        }
+        pendingWho.active = false;
+      } else if (n) {
         log(`👤 ${n} (Slot ${msg.player}) hat gebuzzert`, 'g');
       }
     }
@@ -912,6 +971,7 @@ async function startRound() {
   // Runde erst hier inkrementieren – Web-UI ist alleinige Quelle der Wahrheit
   currentRound++;
   lockedPlayers.clear();
+  pendingWho.active = false;
   firstBuzzPlayer = 0;
   pendingBuzzTime = 0;
   resetBadges();
@@ -962,6 +1022,8 @@ function showCountdown() {
 function fullGameReset() {
   if (!confirm('Spiel komplett zurücksetzen? Alle Punkte und Bestzeiten werden gelöscht.')) return;
   scores.fill(0);
+  subGroups.forEach(g => { if (g) g.forEach(s => { s.score = 0; s.locked = false; }); });
+  pendingWho.active = false;
   bestTimes = [];
   currentRound = 0;
   currentBuzzPlayer = 0;
@@ -980,6 +1042,7 @@ function fullGameReset() {
 function resetRound() {
   sendByte(0x52); // 'R' → physische Buzzer zurücksetzen
   lockedPlayers.clear();
+  pendingWho.active = false;
   resetBadges();
   setSpotifyBlur(false);   // Song-Titel aufdecken (Auflösung)
   renderScoreboard();
@@ -1000,14 +1063,27 @@ async function handleBuzz(player, round) {
   await pauseSpotify();
   clearInterval(progressTimer);
 
-  // 2. Spieler-Badge hervorheben
-  const name  = pname(player);
-  const badge = document.getElementById(`p${player}`);
-  if (badge) {
-    badge.style.background = P_COLORS[player] || '#fff';
-    badge.style.color      = P_TEXT[player]   || '#000';
-    badge.classList.add('active');
-    badge.textContent = `● ${name}`;
+  // 2. Spieler-Badge(s) hervorheben
+  const name    = pname(player);
+  const color   = P_COLORS[player] || '#fff';
+  const textCol = P_TEXT[player]   || '#000';
+  if (isGroup(player)) {
+    subGroups[player].forEach((sub, si) => {
+      if (sub.locked) return;
+      const b = document.getElementById(`p${player}_${si}`);
+      if (b) {
+        b.style.background = color; b.style.color = textCol;
+        b.classList.add('active');
+        b.textContent = `● ${sub.name}`;
+      }
+    });
+  } else {
+    const badge = document.getElementById(`p${player}`);
+    if (badge) {
+      badge.style.background = color; badge.style.color = textCol;
+      badge.classList.add('active');
+      badge.textContent = `● ${name}`;
+    }
   }
 
   // 3. Overlay
@@ -1027,21 +1103,29 @@ async function onRichtig(sendBle = true) {
   stopBuzzTimer();
   setSpotifyBlur(false);
   const winner = currentBuzzPlayer;
-  if (winner >= 1 && winner <= gameNumPlayers) {
+  if (isGroup(winner)) {
+    // Punkt + Bestzeit werden nach Who-Identifikation via 'who' BLE-Meldung vergeben
+    const trackName  = document.getElementById('spotify-track').textContent.trim();
+    const artistName = document.getElementById('spotify-artist').textContent.trim();
+    pendingWho = {
+      active: true, player: winner, richtig: true,
+      trackName, artistName,
+      buzzTime: (winner === firstBuzzPlayer) ? pendingBuzzTime : 0,
+    };
+    log(`Richtig – warte auf Who-Identifikation (Slot ${winner})`, 'g');
+  } else if (winner >= 1 && winner <= gameNumPlayers) {
     scores[winner]++;
     const badge = document.getElementById(`p${winner}`);
     if (badge) badge.textContent = `✓ ${pname(winner)}`;
     log(`+1 Punkt fuer ${pname(winner)} (jetzt ${scores[winner]} Pkt)`, 'g');
-  }
-  // Bestzeit nur werten wenn dieser Spieler auch als Erster gebuzzert hat.
-  // Titel + Künstler erst JETZT aus dem DOM lesen – Spotify hat inzwischen
-  // sicher aktualisiert (Song läuft nach "Richtig" noch weiter).
-  if (winner === firstBuzzPlayer && pendingBuzzTime > 0) {
-    const trackName  = document.getElementById('spotify-track').textContent.trim();
-    const artistName = document.getElementById('spotify-artist').textContent.trim();
-    if (trackName && trackName !== '—') {
-      saveBestTime(winner, trackName, artistName, pendingBuzzTime);
-      log(`⚡ Bestzeit: ${(pendingBuzzTime/1000).toFixed(1)}s – ${trackName}`, 'g');
+    // Bestzeit nur werten wenn dieser Spieler auch als Erster gebuzzert hat.
+    if (winner === firstBuzzPlayer && pendingBuzzTime > 0) {
+      const trackName  = document.getElementById('spotify-track').textContent.trim();
+      const artistName = document.getElementById('spotify-artist').textContent.trim();
+      if (trackName && trackName !== '—') {
+        saveBestTime(winner, trackName, artistName, pendingBuzzTime);
+        log(`⚡ Bestzeit: ${(pendingBuzzTime/1000).toFixed(1)}s – ${trackName}`, 'g');
+      }
     }
   }
   // RESET an Basis senden → Buzzer-LEDs aus, nächste Runde vorbereiten
@@ -1067,16 +1151,22 @@ async function onFalsch(sendBle = true) {
       log(`→ LOCK Spieler ${player}`, 'y');
     } catch(e) { log('BLE senden fehlgeschlagen: '+e.message,'y'); }
   }
-  lockedPlayers.add(player);
 
-  // Badge als gesperrt markieren
-  const badge = document.getElementById(`p${player}`);
-  if (badge) {
-    badge.style.background = 'var(--border)';
-    badge.style.color      = 'var(--muted)';
-    badge.classList.remove('active');
-    badge.classList.add('locked');
-    badge.textContent = `✗ ${pname(player)}`;
+  if (isGroup(player)) {
+    // Individueller Lock wird nach Who-Identifikation via 'who' BLE-Meldung angewendet
+    pendingWho = { active: true, player, richtig: false, trackName: '', artistName: '', buzzTime: 0 };
+    log(`Falsch – warte auf Who-Identifikation (Slot ${player})`, 'y');
+  } else {
+    lockedPlayers.add(player);
+    // Badge als gesperrt markieren
+    const badge = document.getElementById(`p${player}`);
+    if (badge) {
+      badge.style.background = 'var(--border)';
+      badge.style.color      = 'var(--muted)';
+      badge.classList.remove('active');
+      badge.classList.add('locked');
+      badge.textContent = `✗ ${pname(player)}`;
+    }
   }
 
   // Song weiter abspielen – andere koennen noch buzzen
@@ -1091,26 +1181,49 @@ function updateRound() {
 function renderPlayerGrid() {
   const grid = document.getElementById('player-grid');
   if (!grid) return;
-  const n    = gameMode === 'hardware' ? 4 : gameNumPlayers;
-  const cols = n <= 2 ? n : 2;
-  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-  grid.innerHTML = Array.from({length: n}, (_, i) => {
+  const n = gameMode === 'hardware' ? 4 : gameNumPlayers;
+  let html = '';
+  for (let i = 0; i < n; i++) {
     const id    = i + 1;
     const color = P_COLORS[id] || '#fff';
-    const label = pname(id);
-    return `<div class="pbadge" id="p${id}" style="border-color:${color}">${label}</div>`;
-  }).join('');
+    const group = subGroups[id];
+    if (group && group.length > 1) {
+      group.forEach((sub, si) => {
+        const cls = sub.locked ? ' locked' : '';
+        const txt = sub.locked ? `✗ ${sub.name}` : sub.name;
+        html += `<div class="pbadge${cls}" id="p${id}_${si}" style="border-color:${color}">${txt}</div>`;
+      });
+    } else {
+      html += `<div class="pbadge" id="p${id}" style="border-color:${color}">${pname(id)}</div>`;
+    }
+  }
+  grid.style.gridTemplateColumns = 'repeat(2, 1fr)';
+  grid.innerHTML = html;
 }
 
 function resetBadges() {
+  pendingWho.active = false;
   const n = gameMode === 'hardware' ? 4 : gameNumPlayers;
   for (let i = 1; i <= n; i++) {
-    const b = document.getElementById(`p${i}`);
-    if (!b) continue;
-    b.classList.remove('active', 'locked');
-    b.style.background = 'var(--border)';
-    b.style.color      = 'var(--muted)';
-    b.textContent = pname(i);
+    const group = subGroups[i];
+    if (group && group.length > 1) {
+      group.forEach(sub => { sub.locked = false; });
+      group.forEach((sub, si) => {
+        const b = document.getElementById(`p${i}_${si}`);
+        if (!b) return;
+        b.classList.remove('active', 'locked');
+        b.style.background = 'var(--border)';
+        b.style.color      = 'var(--muted)';
+        b.textContent = sub.name;
+      });
+    } else {
+      const b = document.getElementById(`p${i}`);
+      if (!b) continue;
+      b.classList.remove('active', 'locked');
+      b.style.background = 'var(--border)';
+      b.style.color      = 'var(--muted)';
+      b.textContent = pname(i);
+    }
   }
 }
 
@@ -1130,10 +1243,20 @@ function renderScoreboard() {
   const board = document.getElementById('scoreboard');
   if (!board) return;
 
-  const players = Array.from({length: gameNumPlayers}, (_, i) => ({
-    id: i+1, score: scores[i+1], color: P_COLORS[i+1]
-  }));
-  players.sort((a, b) => b.score - a.score || a.id - b.id);
+  // Flache Liste aller Spieler/Sub-Spieler aufbauen
+  let players = [];
+  for (let i = 1; i <= gameNumPlayers; i++) {
+    const color = P_COLORS[i] || '#fff';
+    const group = subGroups[i];
+    if (group && group.length > 1) {
+      group.forEach((sub, si) => {
+        players.push({ name: sub.name, score: sub.score, color, id: i, si });
+      });
+    } else {
+      players.push({ name: pname(i), score: scores[i], color, id: i, si: -1 });
+    }
+  }
+  players.sort((a, b) => b.score - a.score || a.id - b.id || a.si - b.si);
 
   const maxScore = Math.max(...players.map(p => p.score), 1);
   const MEDALS = ['🥇','🥈','🥉','🎖️'];
@@ -1142,12 +1265,12 @@ function renderScoreboard() {
   let rank = 0;
   board.innerHTML = players.map((p, i) => {
     if (i === 0 || p.score !== players[i-1].score) rank = i;
-    const medal  = p.score > 0 ? (MEDALS[rank] ?? `${rank+1}.`) : `${i+1}.`;
-    const pct    = Math.round((p.score / maxScore) * 100);
+    const medal = p.score > 0 ? (MEDALS[rank] ?? `${rank+1}.`) : `${i+1}.`;
+    const pct   = Math.round((p.score / maxScore) * 100);
     return `<div class="score-row" style="--pc:${p.color}">
       <div class="score-medal">${medal}</div>
       <div class="score-player">
-        <div class="score-name">${pname(p.id)}</div>
+        <div class="score-name">${esc(p.name)}</div>
         <div class="score-bar-wrap">
           <div class="score-bar" style="width:${pct}%"></div>
         </div>
@@ -1161,8 +1284,9 @@ function renderScoreboard() {
 //  BESTZEITEN
 // ══════════════════════════════════════════════
 
-function saveBestTime(teamId, trackName, artistName, timeMs) {
-  bestTimes.push({ team: pname(teamId), color: P_COLORS[teamId], song: trackName, artist: artistName, time: timeMs });
+function saveBestTime(teamId, trackName, artistName, timeMs, nameOverride) {
+  const name = nameOverride || pname(teamId);
+  bestTimes.push({ team: name, color: P_COLORS[teamId] || '#fff', song: trackName, artist: artistName, time: timeMs });
   bestTimes.sort((a, b) => a.time - b.time);  // aufsteigend = schnellste zuerst
   renderBestTimes();
 }
@@ -1464,23 +1588,24 @@ function updatePhoneDot(player) {
 
 // Namen-Update live in alle sichtbaren UI-Elemente schreiben
 function updatePlayerNameUI(player, name) {
-  // Badge im Spielerstatus (wenn nicht gerade aktiv/gesperrt)
-  const badge = document.getElementById(`p${player}`);
-  if (badge && !badge.classList.contains('active') && !badge.classList.contains('locked')) {
-    badge.textContent = name;
+  const group = subGroups[player];
+  if (group && group.length > 1) {
+    // Gruppen-Slot: gesamtes Grid neu rendern (Badge-IDs haben sich geändert)
+    renderPlayerGrid();
+  } else {
+    const badge = document.getElementById(`p${player}`);
+    if (badge && !badge.classList.contains('active') && !badge.classList.contains('locked')) {
+      badge.textContent = name;
+    }
   }
-  // Label im QR-Grid (Smartphone-Modus)
-  const qrLabel = document.querySelector(`.qr-item:nth-child(${player}) .qr-team`);
-  // Einfacher: alle qr-team spans durchsuchen und passendes updaten
+  // Label im QR-Grid (Smartphone-Modus) aktualisieren
   document.querySelectorAll('.qr-item').forEach((item, i) => {
     if (i + 1 === player) {
       const t = item.querySelector('.qr-team');
       if (t) t.textContent = name;
     }
   });
-  // Scoreboard neu rendern (zeigt aktualisierte Namen)
   renderScoreboard();
-  // Virtuelle Buzzer-Buttons updaten
   renderVirtualBuzzers();
 }
 
