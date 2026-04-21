@@ -851,13 +851,26 @@ async function onBleNotify(e) {
       log(`📱 ${pname(msg.player)}: ${msg.online ? 'online' : 'offline'}`, msg.online ? 'g' : '');
     }
   } else if (msg.type === 'pname') {
-    // Spieler-Name vom Handy empfangen
+    // Spieler-Name vom Handy empfangen (ggf. mehrere via "Alice;Bob")
+    if (msg.player >= 1 && msg.player <= 10 && msg.name) {
+      const raw = String(msg.name).trim().substring(0, 40);
+      if (raw) {
+        // Semikolon-getrennte Sub-Spieler hübsch als "Alice / Bob" anzeigen
+        const parts = raw.split(';').map(s => s.trim()).filter(s => s);
+        const display = parts.length > 1 ? parts.join(' / ') : (parts[0] || raw);
+        playerNames[msg.player] = display;
+        updatePlayerNameUI(msg.player, display);
+        log(`✏️ Spieler ${msg.player}: ${display}`, 'g');
+      }
+    }
+  } else if (msg.type === 'who') {
+    // Individuelle Person die gebuzzert hat (nach Richtig/Falsch-Entscheidung)
     if (msg.player >= 1 && msg.player <= 10 && msg.name) {
       const n = String(msg.name).trim().substring(0, 20);
       if (n) {
         playerNames[msg.player] = n;
         updatePlayerNameUI(msg.player, n);
-        log(`✏️ Spieler ${msg.player} heißt jetzt: ${n}`, 'g');
+        log(`👤 ${n} (Slot ${msg.player}) hat gebuzzert`, 'g');
       }
     }
   }
