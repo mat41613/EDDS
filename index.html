@@ -51,11 +51,11 @@
         grid-template-columns: 1fr 1fr;
         grid-template-areas:
           "title       title"
-          "controls    spotify"
-          "players     spotify"
-          "scores      besttimes"
-          "connections dev"
-          "log         log";
+          "spotify     spotify"
+          "players     scores"
+          "besttimes   besttimes"
+          "controls    controls"
+          "connections log";
         align-items: start;
       }
       #app-title        { grid-area: title; }
@@ -65,10 +65,28 @@
       #card-scores      { grid-area: scores; }
       #card-besttimes   { grid-area: besttimes; }
       #card-connections { grid-area: connections; }
-      #card-dev         { grid-area: dev; }
       #card-log         { grid-area: log; }
-      /* Spotify-Art im 2-Zeilen-Span größer darstellen */
-      #spotify-art { width: clamp(160px, 38%, 260px) !important; height: clamp(160px, 38%, 260px) !important; }
+      /* Spotify – horizontales Layout auf Desktop */
+      #spotify-now {
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 20px;
+      }
+      #spotify-art {
+        width:  clamp(100px, 14vw, 160px);
+        height: clamp(100px, 14vw, 160px);
+        flex-shrink: 0;
+      }
+      #spotify-info {
+        width: auto;
+        flex: 1;
+        overflow: hidden;
+      }
+      #spotify-track,
+      #spotify-artist {
+        text-align: left;
+      }
     }
 
     h1 { text-align: center; font-size: 1.6rem; font-weight: 700; color: var(--yellow); letter-spacing: .08em; padding: 8px 0 4px; }
@@ -152,6 +170,21 @@
     .btn-richtig { background: var(--green); color: #000; }
     .btn-falsch  { background: var(--red);   color: #fff; }
 
+    /* ── Kein-Moderator: Guess-Eingabe im Buzz-Overlay ── */
+    #buzz-guess-hw { display: none; flex-direction: column; align-items: center;
+                     gap: 12px; margin-top: 16px; width: min(320px, 88vw); }
+    #buzz-guess-input { width: 100%; background: rgba(255,255,255,.1); border: none;
+                        border-bottom: 2.5px solid var(--green); color: #fff;
+                        font-size: 1.05rem; font-weight: 700; text-align: center;
+                        padding: 10px 14px; border-radius: 6px 6px 0 0; outline: none; }
+    #buzz-guess-input::placeholder { opacity: .4; font-weight: 400; }
+    #buzz-guess-confirm { width: 100%; padding: 14px; font-size: 1.05rem;
+                          font-weight: 800; border-radius: 12px; border: none;
+                          background: var(--green); color: #000; cursor: pointer; }
+    /* Smartphone kein-Moderator: Wartetext statt Richtig/Falsch-Buttons */
+    #buzz-guess-wait { display: none; margin-top: 14px; text-align: center; }
+    #buzz-guess-wait-text { font-size: .95rem; color: var(--muted); }
+
     /* ── Buzz Timer Ring ── */
     #buzz-timer { position: relative; width: 96px; height: 96px; flex-shrink: 0; }
     #buzz-timer svg { transform: rotate(-90deg); }
@@ -176,6 +209,16 @@
 
     /* ── Spieler-Grid ── */
     .pbadge.locked { opacity: .35; text-decoration: line-through; }
+
+    /* ── Hardware-Buzzer-Namen editieren ── */
+    .pbadge { position: relative; }
+    .hw-edit-btn { position: absolute; top: 3px; right: 5px; font-size: .6rem;
+                   cursor: pointer; opacity: .45; background: none; border: none;
+                   color: inherit; padding: 0; line-height: 1; }
+    .hw-edit-btn:hover { opacity: 1; }
+    .hw-name-input { background: transparent; border: none; border-bottom: 1.5px solid currentColor;
+                     color: inherit; font-size: .82rem; font-weight: 700; text-align: center;
+                     width: 100%; outline: none; padding: 2px 0; }
 
     /* ── Modus-Toggle ── */
     .mode-btn { font-size: .82rem; padding: 8px 12px; border-radius: 9px;
@@ -206,10 +249,6 @@
     .device-item:hover { background: var(--border); }
     .device-item.selected { border-color: #1DB954; background: rgba(29,185,84,.08); }
     .device-active-badge { color: #1DB954; font-size: .72rem; margin-left: auto; flex-shrink: 0; }
-
-    /* ── Virtuelle Buzzer ── */
-    #dev-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .vbuzz { padding: 18px 8px; font-size: 1rem; font-weight: 700; border-radius: 12px; letter-spacing: .04em; }
 
     /* ── Scoreboard ── */
     #scoreboard { display: flex; flex-direction: column; gap: 4px; }
@@ -286,6 +325,17 @@
     <button class="btn-richtig" onclick="onRichtig()">✓ Richtig</button>
     <button class="btn-falsch"  onclick="onFalsch()">✗ Falsch</button>
   </div>
+  <!-- Kein-Moderator: Texteingabe (Hardware-Modus) -->
+  <div id="buzz-guess-hw">
+    <input id="buzz-guess-input" type="text" placeholder="Songtitel tippen…"
+           autocomplete="off" autocorrect="off" spellcheck="false" maxlength="80"
+           onkeydown="if(event.key==='Enter')evaluateGuess()" />
+    <button id="buzz-guess-confirm" onclick="evaluateGuess()">✓ Bestätigen</button>
+  </div>
+  <!-- Kein-Moderator: Wartetext (Smartphone-Modus) -->
+  <div id="buzz-guess-wait">
+    <div id="buzz-guess-wait-text">Wartet auf Tipp…</div>
+  </div>
 </div>
 
 <!-- Result-Flash Overlay (Hardware-Button Richtig / Falsch) -->
@@ -296,29 +346,6 @@
 
 <div id="app">
   <h1 id="app-title">🎵 Song Quiz</h1>
-
-  <!-- ── Spielsteuerung ── -->
-  <div class="card" id="card-controls">
-    <div class="card-title">Spielsteuerung</div>
-    <!-- Modus-Umschalter -->
-    <div class="btn-row" style="margin-bottom:12px">
-      <button id="btn-mode-hw" class="mode-btn active" onclick="switchMode('hardware')">🎮 Hardware-Buzzer</button>
-      <button id="btn-mode-sm" class="mode-btn"        onclick="switchMode('smartphone')">📱 Smartphone-Modus</button>
-    </div>
-    <div id="round-num">Runde 1</div>
-    <div class="btn-row">
-      <button class="btn-yellow" id="btn-start" onclick="startRound()" disabled>▶ Neue Runde</button>
-      <button class="btn-green"  id="btn-reset" onclick="resetRound()" disabled>🎵 Auflösung</button>
-    </div>
-    <div class="btn-row" style="margin-top:8px">
-      <button class="btn-red" onclick="fullGameReset()" style="width:100%;font-size:.85rem;padding:9px">↺ Spiel komplett zurücksetzen</button>
-    </div>
-    <div class="timer-setting">
-      <span>⏱ Buzz-Timer</span>
-      <input type="number" id="timer-duration" value="20" min="3" max="99" />
-      <span>Sek.</span>
-    </div>
-  </div>
 
   <!-- ── Spotify ── -->
   <div class="card" id="card-spotify">
@@ -386,6 +413,34 @@
     </div>
   </div>
 
+  <!-- ── Spielsteuerung ── -->
+  <div class="card" id="card-controls">
+    <div class="card-title">Spielsteuerung</div>
+    <!-- Modus-Umschalter -->
+    <div class="btn-row" style="margin-bottom:12px">
+      <button id="btn-mode-hw" class="mode-btn active" onclick="switchMode('hardware')">🎮 Hardware-Buzzer</button>
+      <button id="btn-mode-sm" class="mode-btn"        onclick="switchMode('smartphone')">📱 Smartphone-Modus</button>
+    </div>
+    <!-- Moderator-Toggle -->
+    <div class="btn-row" style="margin-bottom:12px;margin-top:-4px">
+      <button id="btn-mod-on"  class="mode-btn" onclick="switchModeratorMode('on')">👤 Mit Moderator</button>
+      <button id="btn-mod-off" class="mode-btn" onclick="switchModeratorMode('off')">🤖 Ohne Moderator</button>
+    </div>
+    <div id="round-num">Runde 1</div>
+    <div class="btn-row">
+      <button class="btn-yellow" id="btn-start" onclick="startRound()" disabled>▶ Neue Runde</button>
+      <button class="btn-green"  id="btn-reset" onclick="resetRound()" disabled>🎵 Auflösung</button>
+    </div>
+    <div class="btn-row" style="margin-top:8px">
+      <button class="btn-red" onclick="fullGameReset()" style="width:100%;font-size:.85rem;padding:9px">↺ Spiel komplett zurücksetzen</button>
+    </div>
+    <div class="timer-setting">
+      <span>⏱ Buzz-Timer</span>
+      <input type="number" id="timer-duration" value="20" min="3" max="99" />
+      <span>Sek.</span>
+    </div>
+  </div>
+
   <!-- ── Verbindungen (BLE + Spotify-Gerät + Logout) ── -->
   <div class="card" id="card-connections">
     <div class="card-title">BuzzQuiz Board</div>
@@ -408,12 +463,6 @@
       </div>
     </div>
 
-  </div>
-
-  <!-- ── Virtuelle Buzzer (Dev) ── -->
-  <div class="card" id="card-dev">
-    <div class="card-title">Virtuelle Buzzer (Dev-Modus)</div>
-    <div id="dev-grid"></div>
   </div>
 
   <!-- ── Log ── -->
@@ -459,6 +508,40 @@ function isGroup(id) { return Array.isArray(subGroups[id]) && subGroups[id].leng
 // Hilfsfunktion: gibt den aktuellen Anzeige-Namen eines Spielers zurück
 function pname(id) { return playerNames[id] || TEAM_NAMES[id] || `Team ${id}`; }
 
+function startEditHwName(e, id) {
+  e.stopPropagation();
+  const badge = document.getElementById('p' + id);
+  if (!badge) return;
+  if (badge.classList.contains('active') || badge.classList.contains('locked')) return;
+  const cur = playerNames[id] || TEAM_NAMES[id] || ('Team ' + id);
+  const inp = document.createElement('input');
+  inp.className = 'hw-name-input';
+  inp.id = 'hw-input-' + id;
+  inp.maxLength = 16;
+  inp.autocomplete = 'off';
+  inp.value = cur;
+  inp.addEventListener('blur', function() { saveHwName(id); });
+  inp.addEventListener('keydown', function(ev) {
+    if (ev.key === 'Enter') { ev.preventDefault(); this.blur(); }
+    if (ev.key === 'Escape') { this.value = cur; this.blur(); }
+  });
+  badge.innerHTML = '';
+  badge.appendChild(inp);
+  inp.focus();
+  inp.select();
+}
+
+function saveHwName(id) {
+  const inp = document.getElementById('hw-input-' + id);
+  if (!inp) return;
+  const name = inp.value.trim() || TEAM_NAMES[id] || ('Team ' + id);
+  playerNames[id] = name;
+  localStorage.setItem('bq_hw_name_' + id, name);
+  renderPlayerGrid();
+  renderScoreboard();
+  log('✏️ HW-Name Spieler ' + id + ': ' + name, 'g');
+}
+
 // ══════════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════════
@@ -475,6 +558,12 @@ let currentBuzzPlayer = 0;
 let scores = [0,0,0,0,0,0,0,0,0,0,0]; // index 0 unused, 1–10
 let gameNumPlayers = 4;               // aktive Spieleranzahl
 let gameMode = localStorage.getItem('gameMode') || 'hardware';
+let moderatorMode = localStorage.getItem('moderatorMode') || 'on'; // 'on' | 'off'
+// HW-Buzzer-Namen: individuell editierbar (localStorage), Fallback = TEAM_NAMES
+for (let _i = 1; _i <= 4; _i++) {
+  const _saved = localStorage.getItem('bq_hw_name_' + _i);
+  if (_saved) playerNames[_i] = _saved;
+}
 let phoneOnline = new Array(11).fill(false); // phoneOnline[1..10]
 let lockedPlayers = new Set();
 let selectedDeviceId = null;
@@ -883,7 +972,6 @@ async function onBleNotify(e) {
         // updatePlayerNameUI reicht nicht, wenn p2 im DOM noch nicht existiert.
         renderPlayerGrid();
         renderScoreboard();
-        renderVirtualBuzzers();
         // QR-Grid-Label aktualisieren
         document.querySelectorAll('.qr-item').forEach((item, i) => {
           if (i + 1 === msg.player) {
@@ -942,6 +1030,23 @@ async function onBleNotify(e) {
         log(`👤 ${n} (Slot ${msg.player}) hat gebuzzert`, 'g');
       }
     }
+  } else if (msg.type === 'guess') {
+    // Kein-Moderator + Smartphone: Tipp vom Spieler-Phone auswerten
+    if (moderatorMode === 'off' && msg.player && msg.text) {
+      const songTitle = document.getElementById('spotify-track')?.textContent?.trim() || '';
+      if (!songTitle || songTitle === '—') {
+        log(`Kein Song für Vergleich – ${pname(msg.player)} = Falsch`, 'y');
+        await onFalsch();
+        return;
+      }
+      if (fuzzyMatch(String(msg.text), songTitle)) {
+        log(`✓ Tipp "${msg.text}" von ${pname(msg.player)} erkannt als "${songTitle}"`, 'g');
+        await onRichtig();
+      } else {
+        log(`✗ Tipp "${msg.text}" von ${pname(msg.player)} passt nicht zu "${songTitle}"`, 'y');
+        await onFalsch();
+      }
+    }
   }
 }
 
@@ -967,6 +1072,45 @@ async function sendSongTitle(track, artist) {
     payload.set(encoded, 1);
     await ctrlChr.writeValueWithoutResponse(payload);
   } catch(e) { /* silent – Display ist optional */ }
+}
+
+// ══════════════════════════════════════════════
+//  FUZZY MATCH (Kein-Moderator-Modus)
+// ══════════════════════════════════════════════
+const GUESS_THRESHOLD = 0.75;
+
+function normalizeGuess(s) {
+  return String(s)
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, '')   // nur Buchstaben, Ziffern, Leerzeichen
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({length: m + 1}, (_, i) =>
+    Array.from({length: n + 1}, (_, j) => i === 0 ? j : j === 0 ? i : 0)
+  );
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i-1] === b[j-1]
+        ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+    }
+  }
+  return dp[m][n];
+}
+
+// Gibt true zurück wenn Tipp ausreichend mit Songtitel übereinstimmt.
+function fuzzyMatch(guess, songTitle) {
+  const a = normalizeGuess(guess);
+  const b = normalizeGuess(songTitle);
+  if (!a || !b) return false;
+  if (a === b) return true;                           // Exakter Match
+  if (b.includes(a) || a.includes(b)) return true;   // Substring-Match
+  const sim = 1 - levenshtein(a, b) / Math.max(a.length, b.length);
+  return sim >= GUESS_THRESHOLD;
 }
 
 // ══════════════════════════════════════════════
@@ -1104,6 +1248,25 @@ async function handleBuzz(player, round) {
   document.getElementById('buzz-overlay').classList.add('show');
   startBuzzTimer();
 
+  // Kein-Moderator: passende Overlay-Sektion einblenden
+  const noMod = moderatorMode === 'off';
+  document.getElementById('buzz-actions').style.display    = noMod ? 'none' : '';
+  document.getElementById('buzz-guess-hw').style.display   = (noMod && gameMode === 'hardware') ? 'flex' : 'none';
+  document.getElementById('buzz-guess-wait').style.display = (noMod && gameMode === 'smartphone') ? 'block' : 'none';
+  if (noMod && gameMode === 'hardware') {
+    const gi = document.getElementById('buzz-guess-input');
+    if (gi) { gi.value = ''; requestAnimationFrame(() => gi.focus()); }
+  } else if (noMod && gameMode === 'smartphone') {
+    document.getElementById('buzz-guess-wait-text').textContent = `Wartet auf Tipp von ${name}…`;
+    // BLE-Byte 0x06 + player_id → ESP32 leitet guess_prompt an das Phone weiter
+    if (ctrlChr) {
+      try {
+        await ctrlChr.writeValueWithoutResponse(new Uint8Array([0x06, player]));
+        log(`→ GUESS_PROMPT Spieler ${player}`, 'g');
+      } catch(e) { log('BLE GUESS_PROMPT fehlgeschlagen: ' + e.message, 'y'); }
+    }
+  }
+
   log(`Buzz: ${name} – Runde ${round}`, 'b');
 }
 
@@ -1184,6 +1347,33 @@ async function onFalsch(sendBle = true) {
   log(`${pname(player)} gesperrt – Runde laeuft weiter`, 'y');
 }
 
+// Kein-Moderator-Modus: Tipp auswerten (Hardware-Modus)
+async function evaluateGuess() {
+  const input = document.getElementById('buzz-guess-input');
+  if (!input) return;
+  const guess = input.value.trim();
+  if (!guess) return;
+
+  // Doppel-Submit verhindern (Enter + Klick gleichzeitig o.ä.)
+  const confirmBtn = document.getElementById('buzz-guess-confirm');
+  if (confirmBtn) confirmBtn.disabled = true;
+
+  const songTitle = document.getElementById('spotify-track')?.textContent?.trim() || '';
+  if (!songTitle || songTitle === '—') {
+    log('Kein Song geladen – Tipp kann nicht geprüft werden', 'y');
+    await onFalsch();
+    return;
+  }
+
+  if (fuzzyMatch(guess, songTitle)) {
+    log(`✓ Tipp "${guess}" erkannt als "${songTitle}"`, 'g');
+    await onRichtig();
+  } else {
+    log(`✗ Tipp "${guess}" stimmt nicht mit "${songTitle}" überein`, 'y');
+    await onFalsch();
+  }
+}
+
 function updateRound() {
   document.getElementById('round-num').textContent = `Runde ${currentRound}`;
 }
@@ -1204,7 +1394,10 @@ function renderPlayerGrid() {
         html += `<div class="pbadge${cls}" id="p${id}_${si}" style="border-color:${color}">${txt}</div>`;
       });
     } else {
-      html += `<div class="pbadge" id="p${id}" style="border-color:${color}">${pname(id)}</div>`;
+      const editBtn = (gameMode === 'hardware' && id <= 4)
+        ? `<button class="hw-edit-btn" onclick="startEditHwName(event,${id})" title="Namen ändern">✏️</button>`
+        : '';
+      html += `<div class="pbadge" id="p${id}" style="border-color:${color}">${pname(id)}${editBtn}</div>`;
     }
   }
   grid.style.gridTemplateColumns = 'repeat(2, 1fr)';
@@ -1229,6 +1422,7 @@ function resetBadges() {
     } else {
       const b = document.getElementById(`p${i}`);
       if (!b) continue;
+      if (b.querySelector('input.hw-name-input')) saveHwName(i);
       b.classList.remove('active', 'locked');
       b.style.background = 'var(--border)';
       b.style.color      = 'var(--muted)';
@@ -1243,6 +1437,7 @@ function updateScoreBadges() {
     const b = document.getElementById(`p${i}`);
     if (!b) continue;
     if (!b.classList.contains('active') && !b.classList.contains('locked')) {
+      if (b.querySelector('input.hw-name-input')) saveHwName(i);
       b.textContent = pname(i);
     }
   }
@@ -1384,14 +1579,6 @@ function setSpotifyBlur(on) {
 }
 
 // ══════════════════════════════════════════════
-//  VIRTUELLE BUZZER (DEV)
-// ══════════════════════════════════════════════
-function virtualBuzz(player) {
-  handleBuzz(player, currentRound);
-  log(`[DEV] Buzz: ${pname(player)}`, 'y');
-}
-
-// ══════════════════════════════════════════════
 //  BIBLIOTHEK
 // ══════════════════════════════════════════════
 let currentTrackList = [];
@@ -1522,6 +1709,7 @@ function updateSpotifyUI(loggedIn) {
 // Beim Laden: gespeicherten Modus wiederherstellen
 window.addEventListener('DOMContentLoaded', () => {
   switchMode(gameMode);   // initialisiert Player-Grid, QR-Codes und Dev-Buzzer
+  switchModeratorMode(moderatorMode);
 });
 
 // ══════════════════════════════════════════════
@@ -1547,15 +1735,21 @@ function switchMode(mode) {
     renderPhoneQR();
   }
   renderPlayerGrid();   // immer – zeigt N Badges je nach Modus
-  renderVirtualBuzzers();
   renderScoreboard();
+}
+
+function switchModeratorMode(mode) {
+  if (mode !== 'on' && mode !== 'off') mode = 'on';
+  moderatorMode = mode;
+  localStorage.setItem('moderatorMode', mode);
+  document.getElementById('btn-mod-on').classList.toggle('active',  mode === 'on');
+  document.getElementById('btn-mod-off').classList.toggle('active', mode === 'off');
 }
 
 function onPlayerCountChange() {
   const count = parseInt(document.getElementById('sm-count')?.value) || 4;
   gameNumPlayers = count;
   renderPhoneQR();
-  renderVirtualBuzzers();
   renderScoreboard();
 }
 
@@ -1616,26 +1810,8 @@ function updatePlayerNameUI(player, name) {
     }
   });
   renderScoreboard();
-  renderVirtualBuzzers();
 }
 
-// ══════════════════════════════════════════════
-//  VIRTUELLE BUZZER – dynamisch nach Spieleranzahl
-// ══════════════════════════════════════════════
-
-function renderVirtualBuzzers() {
-  const n    = gameMode === 'hardware' ? 4 : gameNumPlayers;
-  const grid = document.getElementById('dev-grid');
-  if (!grid) return;
-  grid.innerHTML = Array.from({length: n}, (_, i) => {
-    const id  = i + 1;
-    const bg  = P_COLORS[id] || '#fff';
-    const fg  = P_TEXT[id]   || '#000';
-    const lbl = pname(id);
-    return `<button class="vbuzz" style="background:${bg};color:${fg}"
-              onclick="virtualBuzz(${id})">● ${lbl}</button>`;
-  }).join('');
-}
 </script>
 
 </body>
