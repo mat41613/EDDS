@@ -1077,7 +1077,7 @@ async function sendSongTitle(track, artist) {
 // ══════════════════════════════════════════════
 //  FUZZY MATCH (Kein-Moderator-Modus)
 // ══════════════════════════════════════════════
-const GUESS_THRESHOLD = 0.75;
+let guessThreshold = 0.75;
 
 function normalizeGuess(s) {
   return String(s)
@@ -1108,9 +1108,25 @@ function fuzzyMatch(guess, songTitle) {
   const b = normalizeGuess(songTitle);
   if (!a || !b) return false;
   if (a === b) return true;                           // Exakter Match
-  if (b.includes(a) || a.includes(b)) return true;   // Substring-Match
   const sim = 1 - levenshtein(a, b) / Math.max(a.length, b.length);
-  return sim >= GUESS_THRESHOLD;
+  return sim >= guessThreshold;
+}
+
+function initGuessThreshold() {
+  const saved = parseInt(localStorage.getItem('guessThreshold'), 10);
+  if (!isNaN(saved) && saved >= 50 && saved <= 99) {
+    guessThreshold = saved / 100;
+    const el = document.getElementById('guess-threshold');
+    if (el) el.value = saved;
+  }
+  const el = document.getElementById('guess-threshold');
+  if (!el) return;
+  el.addEventListener('input', () => {
+    const v = parseInt(el.value, 10);
+    if (isNaN(v) || v < 50 || v > 99) return;
+    guessThreshold = v / 100;
+    localStorage.setItem('guessThreshold', v);
+  });
 }
 
 // ══════════════════════════════════════════════
@@ -1710,6 +1726,7 @@ function updateSpotifyUI(loggedIn) {
 window.addEventListener('DOMContentLoaded', () => {
   switchMode(gameMode);   // initialisiert Player-Grid, QR-Codes und Dev-Buzzer
   switchModeratorMode(moderatorMode);
+  initGuessThreshold();
 });
 
 // ══════════════════════════════════════════════
