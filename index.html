@@ -1065,8 +1065,8 @@ async function sendByte(b) {
 // Nur ASCII – Montserrat-Font kennt keine Umlaute/Sonderzeichen
 async function sendSongTitle(track, artist) {
   if (!ctrlChr) return;
-  const t = (track  || '').replace(/[^\x20-\x7E]/g, '?').substring(0, 40);
-  const a = (artist || '').replace(/[^\x20-\x7E]/g, '?').substring(0, 38);
+  const t = (moderatorMode === 'off' ? '' : (track  || '')).replace(/[^\x20-\x7E]/g, '?').substring(0, 40);
+  const a = (moderatorMode === 'off' ? '' : (artist || '')).replace(/[^\x20-\x7E]/g, '?').substring(0, 38);
   const combined = t + (a ? '|' + a : '');
   if (combined === lastSentSongTitle) return;   // nur senden wenn geaendert
   lastSentSongTitle = combined;
@@ -1765,6 +1765,19 @@ function switchModeratorMode(mode) {
   localStorage.setItem('moderatorMode', mode);
   document.getElementById('btn-mod-on').classList.toggle('active',  mode === 'on');
   document.getElementById('btn-mod-off').classList.toggle('active', mode === 'off');
+  // Basis-Display bei Moduswechsel aktualisieren (nur wenn BLE verbunden)
+  if (!ctrlChr) return;
+  const curTrack  = document.getElementById('spotify-track')?.textContent?.trim();
+  const curArtist = document.getElementById('spotify-artist')?.textContent?.trim();
+  if (mode === 'on' && curTrack && curTrack !== '—') {
+    lastSentSongTitle = '';   // force resend
+    sendSongTitle(curTrack, curArtist || '');   // fire-and-forget; Fehler intern stumm abgefangen
+  } else if (mode === 'off') {
+    lastSentSongTitle = '';
+    sendSongTitle('', '');   // Display sofort leeren; fire-and-forget
+    // Hinweis: sendSongTitle() prüft moderatorMode intern erneut via Ternary —
+    // beide Schichten setzen t/a auf '' im 'off'-Modus, Ergebnis identisch.
+  }
 }
 
 function onPlayerCountChange() {
