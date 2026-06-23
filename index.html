@@ -324,6 +324,88 @@
       100% { opacity: 0; transform: scale(0.88); }
     }
     #result-flash.show { display: flex; animation: hw-flash 1.5s ease forwards; }
+
+    /* ══════════════════════════════════════════════
+       SPIELMODUS – Voller Laptop-Bildschirm (≥ 1100 px)
+       ══════════════════════════════════════════════ */
+    @media (min-width: 1100px) {
+      /* 3-Spalten-Grid: links Spieler/Punkte, Mitte Song/F&A, rechts Bestzeiten */
+      #app.game-mode {
+        max-width: 100%;
+        padding: 20px 28px;
+        gap: 16px;
+        grid-template-columns: 260px 1fr 300px;
+        grid-template-areas:
+          "title     title     title"
+          "players   spotify   besttimes"
+          "scores    spotify   besttimes";
+        align-items: stretch;
+      }
+      /* Spotify-Karte: zentriert, füllt beide Zeilen */
+      #app.game-mode #card-spotify {
+        grid-area: spotify;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: 68vh;
+      }
+      #app.game-mode #card-besttimes {
+        grid-area: besttimes;
+        overflow-y: auto;
+      }
+      /* Spotify: deutlich größeres Cover + größere Schrift */
+      #app.game-mode #spotify-now {
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        flex: 1;
+      }
+      #app.game-mode #spotify-art {
+        width:  clamp(200px, 22vw, 360px);
+        height: clamp(200px, 22vw, 360px);
+      }
+      #app.game-mode #spotify-track {
+        font-size: clamp(1.6rem, 2.6vw, 2.8rem);
+        text-align: center;
+        white-space: normal;
+      }
+      #app.game-mode #spotify-artist {
+        font-size: clamp(.95rem, 1.5vw, 1.45rem);
+        text-align: center;
+        white-space: normal;
+        margin-top: 6px;
+      }
+      /* F&A: nimmt Mitte + Rechts ein (Bestzeiten werden in Q&A nicht gezeigt) */
+      #app.game-mode.qa-tab {
+        grid-template-areas:
+          "title   title    title"
+          "players qa-play  qa-play"
+          "scores  qa-play  qa-play";
+      }
+      #app.game-mode.qa-tab #card-qa-game {
+        grid-area: qa-play;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: 68vh;
+      }
+      /* F&A-Frage: sehr groß und zentriert */
+      #app.game-mode #qa-question {
+        font-size: clamp(2rem, 3.5vw, 3.2rem);
+        text-align: center;
+        line-height: 1.3;
+        min-height: unset;
+      }
+      #app.game-mode #qa-answer {
+        font-size: clamp(1.5rem, 2.5vw, 2.4rem);
+        text-align: center;
+      }
+      #app.game-mode #qa-answer-wrap .card-title {
+        text-align: center;
+        font-size: .85rem;
+      }
+    }
   </style>
 </head>
 <body>
@@ -464,10 +546,10 @@
       <div class="card-title" style="margin:0">Frage &amp; Antwort</div>
       <span id="qa-counter" style="font-size:.75rem;color:var(--muted)">Keine Fragen</span>
     </div>
-    <div id="qa-question" style="font-size:1.35rem;font-weight:700;line-height:1.4;min-height:2.8em;margin-bottom:14px">Noch keine Fragen – bitte im Tab unten hinzufügen.</div>
+    <div id="qa-question" style="font-size:1.35rem;font-weight:700;line-height:1.4;min-height:2.8em;margin-bottom:14px;text-align:center">Noch keine Fragen – bitte im Tab unten hinzufügen.</div>
     <div id="qa-answer-wrap" style="display:none;margin-bottom:14px">
-      <div class="card-title" style="margin-bottom:4px">Antwort</div>
-      <div id="qa-answer" style="font-size:1.15rem;font-weight:700;color:var(--green)"></div>
+      <div class="card-title" style="margin-bottom:4px;text-align:center">Antwort</div>
+      <div id="qa-answer" style="font-size:1.15rem;font-weight:700;color:var(--green);text-align:center"></div>
     </div>
     <div class="btn-row">
       <button class="btn-outline" id="qa-prev-btn" onclick="qaPrev()">← Zurück</button>
@@ -709,6 +791,7 @@ function renderQaGame() {
   document.getElementById('qa-reveal-btn').textContent = 'Antwort zeigen';
   document.getElementById('qa-prev-btn').disabled = qaIndex <= 0;
   document.getElementById('qa-next-btn').disabled = qaIndex >= total - 1;
+  if (q) bleSendQaQuestion(q.q);
 }
 
 function qaToggleAnswer() {
@@ -721,6 +804,15 @@ function qaToggleAnswer() {
 
 function qaNext() { if (qaIndex < qaQuestions.length - 1) { qaIndex++; renderQaGame(); } }
 function qaPrev() { if (qaIndex > 0) { qaIndex--; renderQaGame(); } }
+
+async function bleSendQaQuestion(text) {
+  if (!ctrlChr || !text) return;
+  const enc = new TextEncoder().encode(text.substring(0, 120));
+  const payload = new Uint8Array(1 + enc.length);
+  payload[0] = 0x08;
+  payload.set(enc, 1);
+  await ctrlChr.writeValueWithoutResponse(payload);
+}
 
 function qaHandleDrop(e) {
   e.preventDefault();
@@ -1830,15 +1922,15 @@ function saveBestTime(teamId, trackName, artistName, timeMs, nameOverride) {
 function renderBestTimes() {
   const list = document.getElementById('best-times-list');
   if (!list) return;
-  const top3 = bestTimes.slice(0, 3);
-  if (top3.length === 0) {
+  const top10 = bestTimes.slice(0, 10);
+  if (top10.length === 0) {
     list.innerHTML = '<div class="btime-empty">Noch keine Wertung – erkenne den ersten Song!</div>';
     return;
   }
   const MEDALS = ['🥇','🥈','🥉'];
-  list.innerHTML = top3.map((e, i) => `
+  list.innerHTML = top10.map((e, i) => `
     <div class="btime-row">
-      <div class="btime-rank">${MEDALS[i]}</div>
+      <div class="btime-rank">${i < 3 ? MEDALS[i] : (i+1)+'.'}</div>
       <div class="btime-info">
         <div class="btime-team" style="color:${e.color}">${e.team}</div>
         <div class="btime-song">${e.song}</div>
