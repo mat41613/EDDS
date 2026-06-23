@@ -468,6 +468,27 @@
       </div>
     </div>
 
+    <!-- ── WiFi-Konfiguration ── -->
+    <div id="wifi-config" style="margin-top:16px">
+      <div class="card-title">WLAN-Konfiguration</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <label for="wifi-ssid" style="font-size:.78rem;color:var(--muted);width:64px;flex-shrink:0">SSID</label>
+          <input type="text" id="wifi-ssid" maxlength="32" placeholder="Netzwerkname"
+                 style="flex:1;padding:5px 8px;font-size:.85rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px" />
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <label for="wifi-pass" style="font-size:.78rem;color:var(--muted);width:64px;flex-shrink:0">Passwort</label>
+          <input type="password" id="wifi-pass" maxlength="63" placeholder="optional"
+                 style="flex:1;padding:5px 8px;font-size:.85rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px" />
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-blue"    id="btn-wifi-save"  onclick="saveWifiCredentials()"  disabled>💾 Speichern</button>
+        <button class="btn-outline" id="btn-wifi-clear" onclick="clearWifiCredentials()" disabled>Löschen</button>
+      </div>
+    </div>
+
   </div>
 
   <!-- ── Log ── -->
@@ -899,6 +920,8 @@ async function bleConnect() {
     document.getElementById('btn-ble-off').disabled = false;
     document.getElementById('btn-start').disabled   = false;
     document.getElementById('btn-reset').disabled   = false;
+    document.getElementById('btn-wifi-save').disabled  = false;
+    document.getElementById('btn-wifi-clear').disabled = false;
     log('BLE verbunden', 'g');
 
     // Aktuellen Song sofort ans Display senden – nicht auf naechsten 5-s-Poll warten
@@ -925,7 +948,38 @@ function onBleDisconnect() {
   document.getElementById('btn-ble-off').disabled = true;
   document.getElementById('btn-start').disabled   = true;
   document.getElementById('btn-reset').disabled   = true;
+  document.getElementById('btn-wifi-save').disabled  = true;
+  document.getElementById('btn-wifi-clear').disabled = true;
   log('BLE getrennt', 'y');
+}
+
+// ── WiFi-Konfiguration ─────────────────────────────────────────────────────
+
+async function sendWifiCredentials(ssid, pass) {
+  if (!ctrlChr) return;
+  const s = new TextEncoder().encode(ssid);
+  const p = new TextEncoder().encode(pass);
+  const payload = new Uint8Array(2 + s.length + p.length);
+  payload[0] = 0x07;
+  payload[1] = s.length;
+  payload.set(s, 2);
+  payload.set(p, 2 + s.length);
+  await ctrlChr.writeValueWithoutResponse(payload);
+}
+
+function saveWifiCredentials() {
+  const ssid = document.getElementById('wifi-ssid').value.trim();
+  const pass = document.getElementById('wifi-pass').value;
+  if (!ssid) { log('SSID darf nicht leer sein', 'y'); return; }
+  sendWifiCredentials(ssid, pass);
+  log(`📶 WLAN gespeichert: "${ssid}" – Basis startet neu…`, 'g');
+}
+
+function clearWifiCredentials() {
+  sendWifiCredentials('', '');
+  document.getElementById('wifi-ssid').value = '';
+  document.getElementById('wifi-pass').value = '';
+  log('📶 WLAN-Konfiguration gelöscht – Basis startet neu…', 'y');
 }
 
 async function onBleNotify(e) {
