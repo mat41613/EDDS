@@ -591,6 +591,7 @@ for (let _i = 1; _i <= 4; _i++) {
   if (_saved) playerNames[_i] = _saved;
 }
 let phoneOnline = new Array(11).fill(false); // phoneOnline[1..10]
+let baseIp = '192.168.4.1'; // Basis-IP fuer QR-Codes; wird per BLE 'wifi'-Notification aktualisiert
 let lockedPlayers = new Set();
 let selectedDeviceId = null;
 let lastSentSongTitle = '';   // verhindert Doppel-Sends beim Polling
@@ -988,7 +989,12 @@ async function onBleNotify(e) {
   let msg;
   try { msg = JSON.parse(raw); } catch { return; }
 
-  if (msg.type === 'pause') {
+  if (msg.type === 'wifi') {
+    // Basis meldet aktuelle WiFi-Info (Station-IP oder SoftAP-Fallback)
+    baseIp = msg.station && msg.ip ? msg.ip : '192.168.4.1';
+    renderPhoneQR();   // QR-Codes mit aktueller IP neu zeichnen
+    log(`📶 Basis-IP: ${baseIp}${msg.station ? ' (Station)' : ' (SoftAP)'}`, 'g');
+  } else if (msg.type === 'pause') {
     handleBuzz(msg.player, msg.round);
   } else if (msg.type === 'hwstart') {
     log('▶ Neue Runde (Basis-Button)', 'g');
@@ -1849,10 +1855,9 @@ function renderPhoneQR() {
   const grid = document.getElementById('qr-grid');
   if (!grid) return;
 
-  const BASE = 'http://192.168.4.1';
   grid.innerHTML = Array.from({ length: gameNumPlayers }, (_, i) => {
     const pl    = i + 1;
-    const url   = `${BASE}/?player=${pl}`;
+    const url   = `http://${baseIp}/?player=${pl}`;
     const qr    = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&qzone=2&data=${encodeURIComponent(url)}`;
     const label = pname(pl);
     const color = P_COLORS[pl]  || '#fff';
