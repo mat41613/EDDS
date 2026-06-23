@@ -90,6 +90,11 @@
     }
 
     h1 { text-align: center; font-size: 1.6rem; font-weight: 700; color: var(--yellow); letter-spacing: .08em; padding: 8px 0 4px; }
+    #title-row { display: flex; align-items: center; justify-content: center; gap: 12px; }
+    #game-mode-btn { font-size: .72rem; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
+    #game-mode-btn.active { background: var(--green,#1db954); border-color: var(--green,#1db954); color: #fff; }
+    .game-mode #card-connections,
+    .game-mode #card-log { display: none !important; }
 
     /* ── Karten ── */
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
@@ -345,7 +350,10 @@
 </div>
 
 <div id="app">
-  <h1 id="app-title">🎵 Song Quiz</h1>
+  <div id="title-row">
+    <h1 id="app-title">🎵 Song Quiz</h1>
+    <button id="game-mode-btn" onclick="toggleGameMode()" title="Einstellungen ein-/ausblenden">⚙ Einstellungen</button>
+  </div>
 
   <!-- ── Spotify ── -->
   <div class="card" id="card-spotify">
@@ -613,6 +621,23 @@ let pendingBuzzTime  = 0;   // ms von Song-Start bis zum ersten Buzz
 let bestTimes        = [];  // [{team, color, song, artist, time}] sortiert aufsteigend
 
 // ══════════════════════════════════════════════
+// ── Spielmodus-Toggle ──────────────────────────
+function toggleGameMode() {
+  const active = document.getElementById('app').classList.toggle('game-mode');
+  const btn = document.getElementById('game-mode-btn');
+  btn.textContent = active ? '⚙ Einstellungen' : '⚙ Einstellungen';
+  btn.classList.toggle('active', active);
+  btn.title = active ? 'Einstellungen einblenden' : 'Einstellungen ausblenden';
+  localStorage.setItem('buzzquiz_gamemode', active ? '1' : '0');
+}
+(function() {
+  if (localStorage.getItem('buzzquiz_gamemode') === '1') {
+    document.getElementById('app').classList.add('game-mode');
+    const btn = document.getElementById('game-mode-btn');
+    if (btn) btn.classList.add('active');
+  }
+})();
+
 //  LOG
 // ══════════════════════════════════════════════
 function log(msg, cls='') {
