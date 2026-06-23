@@ -94,7 +94,28 @@
     #game-mode-btn { font-size: .72rem; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
     #game-mode-btn.active { background: var(--green,#1db954); border-color: var(--green,#1db954); color: #fff; }
     .game-mode #card-connections,
-    .game-mode #card-log { display: none !important; }
+    .game-mode #card-log,
+    .game-mode #card-controls,
+    .game-mode #card-qa-editor { display: none !important; }
+
+    /* ── Tabs ── */
+    #title-row { grid-area: title; display: flex; flex-direction: column; align-items: stretch; }
+    #title-inner { display: flex; align-items: center; justify-content: center; gap: 12px; }
+    #tab-bar { display: flex; border-bottom: 1px solid var(--border); margin-top: 6px; }
+    .tab-btn { flex: 1; background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 10px 8px; font-size: .85rem; font-weight: 600; color: var(--muted); margin-bottom: -1px; cursor: pointer; }
+    .tab-btn.active { color: var(--text); border-bottom-color: var(--yellow); }
+
+    /* ── Frage & Antwort ── */
+    #card-qa-game, #card-qa-editor { display: none; }
+    #app.qa-tab #card-qa-game, #app.qa-tab #card-qa-editor { display: block; }
+    #app.qa-tab #card-spotify, #app.qa-tab #card-besttimes { display: none !important; }
+    .qa-input { width: 100%; box-sizing: border-box; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: .88rem; font-family: inherit; resize: vertical; }
+    .qa-item { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .qa-item:last-child { border-bottom: none; }
+    @media (min-width: 700px) {
+      #card-qa-game  { grid-area: spotify; }
+      #card-qa-editor { grid-area: besttimes; }
+    }
 
     /* ── Karten ── */
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
@@ -351,8 +372,14 @@
 
 <div id="app">
   <div id="title-row">
-    <h1 id="app-title">🎵 Song Quiz</h1>
-    <button id="game-mode-btn" onclick="toggleGameMode()" title="Einstellungen ein-/ausblenden">⚙ Einstellungen</button>
+    <div id="title-inner">
+      <h1 id="app-title">🎵 Song Quiz</h1>
+      <button id="game-mode-btn" onclick="toggleGameMode()" title="Einstellungen ein-/ausblenden">⚙ Einstellungen</button>
+    </div>
+    <div id="tab-bar" role="tablist">
+      <button class="tab-btn active" id="tab-song" onclick="switchTab('song')" role="tab">Song Quiz</button>
+      <button class="tab-btn" id="tab-qa" onclick="switchTab('qa')" role="tab">Frage &amp; Antwort</button>
+    </div>
   </div>
 
   <!-- ── Spotify ── -->
@@ -428,6 +455,44 @@
     <div class="card-title">⚡ Schnellste Erkennungen</div>
     <div id="best-times-list">
       <div class="btime-empty">Noch keine Wertung – erkenne den ersten Song!</div>
+    </div>
+  </div>
+
+  <!-- ── Frage & Antwort: Spielansicht ── -->
+  <div class="card" id="card-qa-game">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div class="card-title" style="margin:0">Frage &amp; Antwort</div>
+      <span id="qa-counter" style="font-size:.75rem;color:var(--muted)">Keine Fragen</span>
+    </div>
+    <div id="qa-question" style="font-size:1.35rem;font-weight:700;line-height:1.4;min-height:2.8em;margin-bottom:14px">Noch keine Fragen – bitte im Tab unten hinzufügen.</div>
+    <div id="qa-answer-wrap" style="display:none;margin-bottom:14px">
+      <div class="card-title" style="margin-bottom:4px">Antwort</div>
+      <div id="qa-answer" style="font-size:1.15rem;font-weight:700;color:var(--green)"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn-outline" id="qa-prev-btn" onclick="qaPrev()">← Zurück</button>
+      <button class="btn-blue"    id="qa-reveal-btn" onclick="qaToggleAnswer()">Antwort zeigen</button>
+      <button class="btn-outline" id="qa-next-btn" onclick="qaNext()">Weiter →</button>
+    </div>
+  </div>
+
+  <!-- ── Frage & Antwort: Editor ── -->
+  <div class="card" id="card-qa-editor">
+    <div class="card-title">Fragen verwalten</div>
+    <div id="qa-import-drop" style="border:2px dashed var(--border);border-radius:10px;padding:18px;text-align:center;margin-bottom:12px;cursor:pointer" onclick="document.getElementById('qa-file-input').click()" ondragover="event.preventDefault();this.style.borderColor='var(--green)'" ondragleave="this.style.borderColor='var(--border)'" ondrop="qaHandleDrop(event)">
+      <div style="font-size:.9rem;font-weight:600;margin-bottom:4px">Excel oder CSV hochladen</div>
+      <div style="font-size:.75rem;color:var(--muted)">Spalte A = Frage · Spalte B = Antwort · Erste Zeile = Überschrift (wird übersprungen)</div>
+      <input id="qa-file-input" type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="qaHandleFile(this.files[0])">
+    </div>
+    <div id="qa-import-status" style="font-size:.8rem;margin-bottom:10px;display:none"></div>
+    <div id="qa-list" style="margin-bottom:12px;max-height:240px;overflow-y:auto"></div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <textarea id="qa-input-q" class="qa-input" rows="2" placeholder="Einzelne Frage eingeben…"></textarea>
+      <input    id="qa-input-a" class="qa-input" type="text" placeholder="Antwort eingeben…">
+      <div style="display:flex;gap:6px">
+        <button class="btn-green" onclick="qaAddQuestion()" style="flex:1">+ Hinzufügen</button>
+        <button class="btn-outline" onclick="qaClearAll()" style="font-size:.8rem;padding:8px 12px">Alle löschen</button>
+      </div>
     </div>
   </div>
 
@@ -621,6 +686,157 @@ let pendingBuzzTime  = 0;   // ms von Song-Start bis zum ersten Buzz
 let bestTimes        = [];  // [{team, color, song, artist, time}] sortiert aufsteigend
 
 // ══════════════════════════════════════════════
+// ── Frage & Antwort ───────────────────────────
+let qaQuestions = JSON.parse(localStorage.getItem('buzzquiz_qa') || '[]');
+let qaIndex = 0;
+
+function switchTab(tab) {
+  const isQa = tab === 'qa';
+  document.getElementById('app').classList.toggle('qa-tab', isQa);
+  document.getElementById('tab-song').classList.toggle('active', !isQa);
+  document.getElementById('tab-qa').classList.toggle('active', isQa);
+  localStorage.setItem('buzzquiz_tab', tab);
+  if (isQa) { renderQaEditor(); renderQaGame(); }
+}
+
+function renderQaGame() {
+  const q = qaQuestions[qaIndex];
+  const total = qaQuestions.length;
+  document.getElementById('qa-counter').textContent = total ? `Frage ${qaIndex + 1} / ${total}` : 'Keine Fragen';
+  document.getElementById('qa-question').textContent = q ? q.q : 'Noch keine Fragen – bitte unten hinzufügen.';
+  document.getElementById('qa-answer').textContent = q ? q.a : '';
+  document.getElementById('qa-answer-wrap').style.display = 'none';
+  document.getElementById('qa-reveal-btn').textContent = 'Antwort zeigen';
+  document.getElementById('qa-prev-btn').disabled = qaIndex <= 0;
+  document.getElementById('qa-next-btn').disabled = qaIndex >= total - 1;
+}
+
+function qaToggleAnswer() {
+  const wrap = document.getElementById('qa-answer-wrap');
+  const btn  = document.getElementById('qa-reveal-btn');
+  const vis  = wrap.style.display !== 'none';
+  wrap.style.display = vis ? 'none' : 'block';
+  btn.textContent = vis ? 'Antwort zeigen' : 'Antwort verbergen';
+}
+
+function qaNext() { if (qaIndex < qaQuestions.length - 1) { qaIndex++; renderQaGame(); } }
+function qaPrev() { if (qaIndex > 0) { qaIndex--; renderQaGame(); } }
+
+function qaHandleDrop(e) {
+  e.preventDefault();
+  document.getElementById('qa-import-drop').style.borderColor = 'var(--border)';
+  const file = e.dataTransfer.files[0];
+  if (file) qaHandleFile(file);
+}
+
+function qaHandleFile(file) {
+  if (!file) return;
+  const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+  if (isExcel) {
+    qaLoadSheetJs(() => qaParseExcel(file));
+  } else {
+    const reader = new FileReader();
+    reader.onload = e => qaImportCsv(e.target.result);
+    reader.readAsText(file, 'UTF-8');
+  }
+}
+
+function qaLoadSheetJs(cb) {
+  if (window.XLSX) { cb(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  s.onload = cb;
+  document.head.appendChild(s);
+}
+
+function qaParseExcel(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+    const rows = XLSX.utils.sheet_to_array(wb.Sheets[wb.SheetNames[0]]);
+    qaImportRows(rows);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function qaImportCsv(text) {
+  const rows = text.split(/\r?\n/).map(l => l.split(/[,;	]/));
+  qaImportRows(rows);
+}
+
+function qaImportRows(rows) {
+  let added = 0, skipped = 0;
+  rows.forEach((row, i) => {
+    const q = (row[0] || '').toString().trim();
+    const a = (row[1] || '').toString().trim();
+    if (!q || !a) { skipped++; return; }
+    if (i === 0 && /frage|question/i.test(q)) { skipped++; return; }
+    qaQuestions.push({ q, a });
+    added++;
+  });
+  localStorage.setItem('buzzquiz_qa', JSON.stringify(qaQuestions));
+  const status = document.getElementById('qa-import-status');
+  status.style.display = 'block';
+  status.style.color = added ? 'var(--green)' : 'var(--red)';
+  status.textContent = added ? `${added} Fragen importiert${skipped ? ` (${skipped} leer übersprungen)` : ''}.` : 'Keine gültigen Zeilen gefunden (Spalte A = Frage, Spalte B = Antwort).';
+  renderQaEditor();
+  renderQaGame();
+}
+
+function qaClearAll() {
+  if (!confirm(`Alle ${qaQuestions.length} Fragen löschen?`)) return;
+  qaQuestions = [];
+  qaIndex = 0;
+  localStorage.setItem('buzzquiz_qa', '[]');
+  document.getElementById('qa-import-status').style.display = 'none';
+  renderQaEditor();
+  renderQaGame();
+}
+
+function qaAddQuestion() {
+  const q = (document.getElementById('qa-input-q').value || '').trim();
+  const a = (document.getElementById('qa-input-a').value || '').trim();
+  if (!q || !a) return;
+  qaQuestions.push({ q, a });
+  localStorage.setItem('buzzquiz_qa', JSON.stringify(qaQuestions));
+  document.getElementById('qa-input-q').value = '';
+  document.getElementById('qa-input-a').value = '';
+  renderQaEditor();
+  renderQaGame();
+}
+
+function qaDeleteQuestion(i) {
+  if (!confirm('Frage löschen?')) return;
+  qaQuestions.splice(i, 1);
+  if (qaIndex >= qaQuestions.length) qaIndex = Math.max(0, qaQuestions.length - 1);
+  localStorage.setItem('buzzquiz_qa', JSON.stringify(qaQuestions));
+  renderQaEditor();
+  renderQaGame();
+}
+
+function renderQaEditor() {
+  const list = document.getElementById('qa-list');
+  if (!list) return;
+  if (!qaQuestions.length) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:4px 0">Noch keine Fragen gespeichert.</div>';
+    return;
+  }
+  list.innerHTML = qaQuestions.map((q, i) => `
+    <div class="qa-item">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.85rem;font-weight:600;word-break:break-word">${esc(q.q)}</div>
+        <div style="font-size:.8rem;color:var(--green);margin-top:2px">${esc(q.a)}</div>
+      </div>
+      <button class="btn-outline" style="padding:4px 8px;font-size:.75rem;flex-shrink:0" onclick="qaDeleteQuestion(${i})">✕</button>
+    </div>`).join('');
+}
+
+(function initQa() {
+  renderQaEditor();
+  renderQaGame();
+  if (localStorage.getItem('buzzquiz_tab') === 'qa') switchTab('qa');
+})();
+
 // ── Spielmodus-Toggle ──────────────────────────
 function toggleGameMode() {
   const active = document.getElementById('app').classList.toggle('game-mode');
