@@ -390,6 +390,16 @@
           <option value="8">8</option>
           <option value="9">9</option>
           <option value="10">10</option>
+          <option value="11">11</option>
+          <option value="12">12</option>
+          <option value="13">13</option>
+          <option value="14">14</option>
+          <option value="15">15</option>
+          <option value="16">16</option>
+          <option value="17">17</option>
+          <option value="18">18</option>
+          <option value="19">19</option>
+          <option value="20">20</option>
         </select>
       </div>
       <div style="font-size:.75rem;color:var(--muted);margin-bottom:8px;line-height:1.4">
@@ -517,7 +527,7 @@ const TEAM_NAMES = ['','Team Blau','Team Grün','Team Rot','Team Gelb','Team Lil
 // Startet als Kopie der TEAM_NAMES (Standard-Fallback).
 let playerNames = [...TEAM_NAMES];
 // Sub-Spieler-Gruppen: null = Einzel, Array = [{name, score, locked}, …]
-let subGroups = new Array(11).fill(null);
+let subGroups = new Array(21).fill(null);
 // Ausstehende Who-Identifikation nach Richtig/Falsch für Gruppen-Slots
 let pendingWho = { active: false, player: 0, richtig: false, trackName: '', artistName: '', buzzTime: 0 };
 
@@ -590,7 +600,7 @@ for (let _i = 1; _i <= 4; _i++) {
   const _saved = localStorage.getItem('bq_hw_name_' + _i);
   if (_saved) playerNames[_i] = _saved;
 }
-let phoneOnline = new Array(11).fill(false); // phoneOnline[1..10]
+let phoneOnline = new Array(21).fill(false); // phoneOnline[1..20]
 let baseIp = '192.168.4.1'; // Basis-IP fuer QR-Codes; wird per BLE 'wifi'-Notification aktualisiert
 let lockedPlayers = new Set();
 let selectedDeviceId = null;
