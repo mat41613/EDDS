@@ -96,6 +96,7 @@
     .game-mode #card-connections,
     .game-mode #card-log,
     .game-mode #card-controls,
+    .game-mode #card-dev,
     .game-mode #card-qa-editor { display: none !important; }
 
     /* ── Tabs ── */
@@ -406,6 +407,45 @@
         font-size: .85rem;
       }
     }
+
+    /* ══════════════════════════════════════════════
+       GLÜCKSRAD-STRAFMODUS
+       ══════════════════════════════════════════════ */
+    #wheel-overlay {
+      display: none; position: fixed; inset: 0; z-index: 350;
+      background: rgba(0,0,0,.96);
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 22px; padding: 20px;
+    }
+    #wheel-overlay.show { display: flex; }
+    #wheel-title { font-size: clamp(1.4rem, 5vw, 2.4rem); font-weight: 900;
+                   letter-spacing: .04em; text-align: center; }
+    #wheel-stage { position: relative; width: min(70vw, 70vh, 460px);
+                   height: min(70vw, 70vh, 460px); }
+    #wheel-pointer { position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
+                     width: 0; height: 0; z-index: 2;
+                     border-left: 16px solid transparent; border-right: 16px solid transparent;
+                     border-top: 26px solid #fff; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
+    #wheel-disc { width: 100%; height: 100%; border-radius: 50%;
+                  border: 6px solid #fff; box-shadow: 0 8px 40px rgba(0,0,0,.6);
+                  background: var(--border); position: relative; overflow: hidden;
+                  transition: transform 4s cubic-bezier(.17,.67,.12,.99); }
+    .wheel-label { position: absolute; left: 50%; top: 50%; transform-origin: 0 0;
+                   font-weight: 800; font-size: .85rem; color: #000;
+                   white-space: nowrap; pointer-events: none; }
+    #wheel-result { font-size: clamp(1.6rem, 6vw, 3rem); font-weight: 900;
+                    text-align: center; min-height: 1.2em; color: var(--yellow); }
+    #wheel-actions { display: flex; gap: 14px; }
+    #wheel-actions button { min-width: 130px; padding: 14px 24px;
+                            font-size: 1.05rem; border-radius: 14px; }
+    .score-wrong { color: var(--red); font-size: .78rem; font-weight: 800;
+                   margin-left: 8px; white-space: nowrap; }
+
+    /* ── Dev-Buzzer (Developer-Modus) ── */
+    #dev-buzzer-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 6px; }
+    .dev-buzz-btn { border: none; border-radius: 10px; padding: 12px 10px; font-size: .9rem;
+                    font-weight: 700; cursor: pointer; text-align: center; }
+    .dev-buzz-btn:disabled { opacity: .35; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -450,6 +490,20 @@
 <div id="result-flash">
   <div id="result-flash-icon">✓</div>
   <div id="result-flash-label">RICHTIG!</div>
+</div>
+
+<!-- Glücksrad-Strafmodus Overlay -->
+<div id="wheel-overlay">
+  <div id="wheel-title">TEAM – STRAFE!</div>
+  <div id="wheel-stage">
+    <div id="wheel-pointer"></div>
+    <div id="wheel-disc"></div>
+  </div>
+  <div id="wheel-result"></div>
+  <div id="wheel-actions">
+    <button class="btn-yellow"  id="wheel-spin-btn"  onclick="spinWheel()">🎡 Drehen</button>
+    <button class="btn-outline" id="wheel-close-btn" onclick="closeWheel()">Schließen</button>
+  </div>
 </div>
 
 <div id="app">
@@ -591,6 +645,14 @@
       <button id="btn-mod-on"  class="mode-btn" onclick="switchModeratorMode('on')">👤 Mit Moderator</button>
       <button id="btn-mod-off" class="mode-btn" onclick="switchModeratorMode('off')">🤖 Ohne Moderator</button>
     </div>
+    <!-- Glücksrad-Strafmodus -->
+    <div class="btn-row" style="margin-bottom:12px;margin-top:-4px">
+      <button id="btn-mode-wheel" class="mode-btn" onclick="toggleWheelMode()" style="width:100%">🎡 Glücksrad-Strafmodus</button>
+    </div>
+    <!-- Dev-Modus (virtuelle Buzzer) -->
+    <div class="btn-row" style="margin-bottom:12px;margin-top:-4px">
+      <button id="btn-mode-dev" class="mode-btn" onclick="toggleDevMode()" style="width:100%">🛠 Dev-Modus</button>
+    </div>
     <div id="round-num">Runde 1</div>
     <div class="btn-row">
       <button class="btn-yellow" id="btn-start" onclick="startRound()" disabled>▶ Neue Runde</button>
@@ -609,6 +671,25 @@
       <input type="number" id="guess-threshold" value="75" min="50" max="99" />
       <span>%</span>
     </div>
+    <div class="timer-setting">
+      <label for="wheel-threshold">❌ Strafe ab</label>
+      <input type="number" id="wheel-threshold" value="3" min="1" max="99" />
+      <span>Falsch</span>
+    </div>
+    <div style="margin-top:12px">
+      <label for="wheel-options" style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:6px">🎡 Rad-Optionen (eine pro Zeile)</label>
+      <textarea id="wheel-options" class="qa-input" rows="4" style="font-size:.85rem">Straftrichter
+Penninger
+Team exxt
+Steinigung</textarea>
+    </div>
+  </div>
+
+  <!-- ── Dev-Buzzer (Developer-Modus) ── -->
+  <div class="card" id="card-dev" style="display:none">
+    <div class="card-title">Dev-Buzzer</div>
+    <div style="font-size:.75rem;color:var(--muted);margin-bottom:4px">Virtuelle Buzzer zum Testen – Klick löst einen Buzz wie echte Hardware aus.</div>
+    <div id="dev-buzzer-grid"></div>
   </div>
 
   <!-- ── Verbindungen (BLE + Spotify-Gerät + Logout) ── -->
@@ -747,6 +828,12 @@ let currentProgress = 0;
 let currentDuration = 0;
 let currentBuzzPlayer = 0;
 let scores = new Array(21).fill(0); // index 0 unused, 1–20
+let devMode = localStorage.getItem('buzzquiz_devmode') === '1'; // Developer-Modus (virtuelle Buzzer)
+let wheelMode      = localStorage.getItem('buzzquiz_wheelmode') === '1';
+let wrongCounts    = new Array(21).fill(0); // Falsch-Zähler pro Team-Slot, 1–20
+let wheelRotation  = 0;   // kumulative Rad-Rotation in Grad
+let wheelSegments  = [];  // aktuelle Segment-Optionen des Rads
+const WHEEL_COLORS = ['#ffe000','#00e050','#40a0ff','#ff3030','#ff9f1c','#b15cff','#2ec4b6','#ff5d8f'];
 let gameNumPlayers = 4;               // aktive Spieleranzahl
 let gameMode = localStorage.getItem('gameMode') || 'hardware';
 let moderatorMode = localStorage.getItem('moderatorMode') || 'on'; // 'on' | 'off'
@@ -1537,6 +1624,145 @@ function initGuessThreshold() {
 }
 
 // ══════════════════════════════════════════════
+//  GLÜCKSRAD-STRAFMODUS
+// ══════════════════════════════════════════════
+function toggleWheelMode() {
+  wheelMode = !wheelMode;
+  localStorage.setItem('buzzquiz_wheelmode', wheelMode ? '1' : '0');
+  document.getElementById('btn-mode-wheel').classList.toggle('active', wheelMode);
+  renderScoreboard();
+  log(`🎡 Glücksrad-Strafmodus ${wheelMode ? 'an' : 'aus'}`, wheelMode ? 'g' : '');
+}
+
+function getWheelOptions() {
+  const raw = document.getElementById('wheel-options')?.value
+            ?? localStorage.getItem('buzzquiz_wheeloptions') ?? '';
+  return raw.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+}
+
+function getWheelThreshold() {
+  const v = parseInt(document.getElementById('wheel-threshold')?.value, 10);
+  return (!isNaN(v) && v >= 1) ? v : 3;
+}
+
+function initWheelSettings() {
+  document.getElementById('btn-mode-wheel')?.classList.toggle('active', wheelMode);
+
+  const th = document.getElementById('wheel-threshold');
+  const savedTh = parseInt(localStorage.getItem('buzzquiz_wheelthreshold'), 10);
+  if (th && !isNaN(savedTh) && savedTh >= 1) th.value = savedTh;
+  th?.addEventListener('input', () => {
+    const v = parseInt(th.value, 10);
+    if (isNaN(v) || v < 1) return;
+    localStorage.setItem('buzzquiz_wheelthreshold', v);
+  });
+
+  const opt = document.getElementById('wheel-options');
+  const savedOpt = localStorage.getItem('buzzquiz_wheeloptions');
+  if (opt && savedOpt !== null) opt.value = savedOpt;
+  opt?.addEventListener('input', () => {
+    localStorage.setItem('buzzquiz_wheeloptions', opt.value);
+  });
+}
+
+function buildWheel() {
+  const opts = getWheelOptions();
+  const disc = document.getElementById('wheel-disc');
+  if (!opts.length) { disc.style.background = 'var(--border)'; disc.innerHTML = ''; return []; }
+  // ≤6 Optionen → verdoppeln (A B C D A B C D), sonst je einmal
+  const segments = opts.length <= 6 ? opts.concat(opts) : opts.slice();
+  const n   = segments.length;
+  const seg = 360 / n;
+  const stops = segments
+    .map((s, i) => `${WHEEL_COLORS[i % WHEEL_COLORS.length]} ${i * seg}deg ${(i + 1) * seg}deg`)
+    .join(', ');
+  disc.style.background = `conic-gradient(from 0deg, ${stops})`;
+  const r = (disc.clientWidth || 320) * 0.30;
+  disc.innerHTML = segments.map((s, i) => {
+    const mid = (i + 0.5) * seg;        // Mitte des Segments, im Uhrzeigersinn von oben
+    return `<div class="wheel-label" style="transform: rotate(${mid - 90}deg) translateX(${r}px)">${esc(s)}</div>`;
+  }).join('');
+  return segments;
+}
+
+function openWheel(player) {
+  const ov    = document.getElementById('wheel-overlay');
+  const title = document.getElementById('wheel-title');
+  const name  = pname(player);
+  title.textContent = `TEAM ${name.toUpperCase()} – STRAFE!`;
+  title.style.color = P_COLORS[player] || '#fff';
+  document.getElementById('wheel-result').textContent = '';
+  document.getElementById('wheel-spin-btn').disabled = false;
+  ov.classList.add('show');
+  // Rad erst nach dem Sichtbarwerden bauen, damit clientWidth verfügbar ist
+  // (doppeltes rAF: erst nach Layout-Flush hat die Disc ihre echte Breite)
+  requestAnimationFrame(() => requestAnimationFrame(() => { wheelSegments = buildWheel(); }));
+}
+
+function spinWheel() {
+  if (!wheelSegments.length) return;
+  const spinBtn = document.getElementById('wheel-spin-btn');
+  const disc    = document.getElementById('wheel-disc');
+  spinBtn.disabled = true;
+  const n   = wheelSegments.length;
+  const seg = 360 / n;
+  const target = Math.floor(Math.random() * n);
+  const mid    = (target + 0.5) * seg;
+  const jitter = (Math.random() - 0.5) * (seg * 0.6);   // bleibt innerhalb des Segments
+  // Rotation so wählen, dass Segment `target` unter dem Zeiger (oben) landet
+  const desiredMod = (((jitter - mid) % 360) + 360) % 360;
+  const currentMod = ((wheelRotation % 360) + 360) % 360;
+  let delta = desiredMod - currentMod;
+  if (delta < 0) delta += 360;
+  wheelRotation += delta + 360 * 5;   // mind. 5 volle Umdrehungen, immer vorwärts
+  disc.style.transform = `rotate(${wheelRotation}deg)`;
+  setTimeout(() => {
+    // Nur anzeigen, wenn das Overlay noch offen ist (Schutz vor veraltetem Ergebnis,
+    // falls der Moderator mitten im Dreh schließt und ein anderes Team buzzert)
+    if (!document.getElementById('wheel-overlay').classList.contains('show')) return;
+    document.getElementById('wheel-result').textContent = wheelSegments[target];
+    spinBtn.disabled = false;
+  }, 4100);   // etwas länger als die 4s-Transition
+}
+
+function closeWheel() {
+  document.getElementById('wheel-overlay').classList.remove('show');
+}
+
+// ══════════════════════════════════════════════
+//  DEVELOPER-MODUS (virtuelle Buzzer)
+// ══════════════════════════════════════════════
+function toggleDevMode() {
+  devMode = !devMode;
+  localStorage.setItem('buzzquiz_devmode', devMode ? '1' : '0');
+  document.getElementById('btn-mode-dev').classList.toggle('active', devMode);
+  document.getElementById('card-dev').style.display = devMode ? '' : 'none';
+  renderDevBuzzers();
+  log(`🛠 Dev-Modus ${devMode ? 'an' : 'aus'}`, devMode ? 'g' : '');
+}
+
+function initDevMode() {
+  document.getElementById('btn-mode-dev').classList.toggle('active', devMode);
+  document.getElementById('card-dev').style.display = devMode ? '' : 'none';
+  renderDevBuzzers();
+}
+
+function renderDevBuzzers() {
+  const grid = document.getElementById('dev-buzzer-grid');
+  if (!grid) return;
+  if (!devMode) { grid.innerHTML = ''; return; }
+  const n = gameMode === 'hardware' ? 4 : gameNumPlayers;
+  let html = '';
+  for (let i = 1; i <= n; i++) {
+    const color   = P_COLORS[i] || '#fff';
+    const textCol = P_TEXT[i]   || '#000';
+    const locked  = lockedPlayers.has(i);
+    html += `<button class="dev-buzz-btn" id="dev-buzz-${i}" onclick="handleBuzz(${i}, currentRound)"${locked ? ' disabled' : ''} style="background:${color};color:${textCol}">● ${esc(pname(i))}</button>`;
+  }
+  grid.innerHTML = html;
+}
+
+// ══════════════════════════════════════════════
 //  SPIELLOGIK
 // ══════════════════════════════════════════════
 async function startRound() {
@@ -1602,6 +1828,8 @@ function fullGameReset() {
   subGroups.forEach(g => { if (g) g.forEach(s => { s.score = 0; s.locked = false; }); });
   pendingWho.active = false;
   bestTimes = [];
+  wrongCounts.fill(0);
+  closeWheel();
   currentRound = 0;
   currentBuzzPlayer = 0;
   firstBuzzPlayer   = 0;
@@ -1754,6 +1982,7 @@ async function onFalsch(sendBle = true) {
     log(`Falsch – warte auf Who-Identifikation (Slot ${player})`, 'y');
   } else {
     lockedPlayers.add(player);
+    renderDevBuzzers();   // gesperrten Dev-Buzzer-Button ausgrauen
     // Badge als gesperrt markieren
     const badge = document.getElementById(`p${player}`);
     if (badge) {
@@ -1762,6 +1991,16 @@ async function onFalsch(sendBle = true) {
       badge.classList.remove('active');
       badge.classList.add('locked');
       badge.textContent = `✗ ${pname(player)}`;
+    }
+  }
+
+  // Glücksrad-Strafmodus: Falsch pro Team zählen, bei Vielfachem der Schwelle Rad auslösen
+  if (wheelMode && player >= 1 && player <= gameNumPlayers) {
+    wrongCounts[player]++;
+    renderScoreboard();
+    const thr = getWheelThreshold();
+    if (wrongCounts[player] % thr === 0) {
+      openWheel(player);
     }
   }
 
@@ -1825,6 +2064,7 @@ function renderPlayerGrid() {
   }
   grid.style.gridTemplateColumns = 'repeat(2, 1fr)';
   grid.innerHTML = html;
+  renderDevBuzzers();   // Dev-Buzzer-Beschriftungen/Anzahl aktuell halten
 }
 
 function resetBadges() {
@@ -1852,6 +2092,7 @@ function resetBadges() {
       b.textContent = pname(i);
     }
   }
+  renderDevBuzzers();   // Dev-Buzzer nach Reset/Entsperren aktualisieren
 }
 
 function updateScoreBadges() {
@@ -1895,10 +2136,13 @@ function renderScoreboard() {
     if (i === 0 || p.score !== players[i-1].score) rank = i;
     const medal = p.score > 0 ? (MEDALS[rank] ?? `${rank+1}.`) : `${i+1}.`;
     const pct   = Math.round((p.score / maxScore) * 100);
+    // Falsch-Zähler nur im Glücksrad-Modus; pro Slot einmal (Einzel: si=-1, Gruppe: erster Sub si=0)
+    const showWrong = wheelMode && p.si <= 0 && wrongCounts[p.id] > 0;
+    const wrongTag  = showWrong ? `<span class="score-wrong">✗ ${wrongCounts[p.id]}</span>` : '';
     return `<div class="score-row" style="--pc:${p.color}">
       <div class="score-medal">${medal}</div>
       <div class="score-player">
-        <div class="score-name">${esc(p.name)}</div>
+        <div class="score-name">${esc(p.name)}${wrongTag}</div>
         <div class="score-bar-wrap">
           <div class="score-bar" style="width:${pct}%"></div>
         </div>
@@ -2134,6 +2378,8 @@ window.addEventListener('DOMContentLoaded', () => {
   switchMode(gameMode);   // initialisiert Player-Grid, QR-Codes und Dev-Buzzer
   switchModeratorMode(moderatorMode);
   initGuessThreshold();
+  initWheelSettings();
+  initDevMode();
 });
 
 // ══════════════════════════════════════════════
@@ -2188,6 +2434,7 @@ function onPlayerCountChange() {
   gameNumPlayers = count;
   renderPhoneQR();
   renderScoreboard();
+  renderDevBuzzers();
 }
 
 // ══════════════════════════════════════════════
