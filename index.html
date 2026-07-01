@@ -1725,8 +1725,11 @@ function spinWheel() {
   }, 4100);   // etwas länger als die 4s-Transition
 }
 
-function closeWheel() {
+function closeWheel(resume = true) {
   document.getElementById('wheel-overlay').classList.remove('show');
+  // Song lief während des Rads pausiert weiter – erst beim Schließen fortsetzen.
+  // resume=false beim kompletten Spiel-Reset (kein ungewolltes Auto-Play).
+  if (resume) resumeSpotify();
 }
 
 // ══════════════════════════════════════════════
@@ -1829,7 +1832,7 @@ function fullGameReset() {
   pendingWho.active = false;
   bestTimes = [];
   wrongCounts.fill(0);
-  closeWheel();
+  closeWheel(false);   // Rad schließen ohne Song fortzusetzen (kompletter Reset)
   currentRound = 0;
   currentBuzzPlayer = 0;
   firstBuzzPlayer   = 0;
@@ -1995,17 +1998,20 @@ async function onFalsch(sendBle = true) {
   }
 
   // Glücksrad-Strafmodus: Falsch pro Team zählen, bei Vielfachem der Schwelle Rad auslösen
+  let wheelOpened = false;
   if (wheelMode && player >= 1 && player <= gameNumPlayers) {
     wrongCounts[player]++;
     renderScoreboard();
     const thr = getWheelThreshold();
     if (wrongCounts[player] % thr === 0) {
       openWheel(player);
+      wheelOpened = true;
     }
   }
 
-  // Song weiter abspielen – andere koennen noch buzzen
-  await resumeSpotify();
+  // Song weiter abspielen – andere koennen noch buzzen.
+  // Bei offenem Glücksrad NICHT sofort fortsetzen – closeWheel() setzt fort.
+  if (!wheelOpened) await resumeSpotify();
   log(`${pname(player)} gesperrt – Runde laeuft weiter`, 'y');
 }
 
