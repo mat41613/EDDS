@@ -97,6 +97,7 @@
     .game-mode #card-log,
     .game-mode #card-controls,
     .game-mode #card-dev,
+    .game-mode #card-colors,
     .game-mode #card-qa-editor { display: none !important; }
 
     /* ── Tabs ── */
@@ -446,6 +447,15 @@
     .dev-buzz-btn { border: none; border-radius: 10px; padding: 12px 10px; font-size: .9rem;
                     font-weight: 700; cursor: pointer; text-align: center; }
     .dev-buzz-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+    /* ── Team-Farben (Einstellungen) ── */
+    #color-settings-grid { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+    .color-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+    .color-row .color-name { flex: 1; font-size: .88rem; font-weight: 600;
+                             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .color-row input[type="color"] { width: 44px; height: 30px; border: none;
+                                     border-radius: 8px; background: none; cursor: pointer;
+                                     padding: 0; flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -692,6 +702,15 @@ Steinigung</textarea>
     <div id="dev-buzzer-grid"></div>
   </div>
 
+  <!-- ── Team-Farben (Einstellungen) ── -->
+  <div class="card" id="card-colors">
+    <div class="card-title">Team-Farben</div>
+    <div id="color-settings-grid"></div>
+    <div class="btn-row" style="margin-top:10px">
+      <button class="btn-outline" onclick="resetTeamColors()" style="font-size:.85rem">Farben zurücksetzen</button>
+    </div>
+  </div>
+
   <!-- ── Verbindungen (BLE + Spotify-Gerät + Logout) ── -->
   <div class="card" id="card-connections">
     <div class="card-title">BuzzQuiz Board</div>
@@ -756,8 +775,15 @@ const SVC_UUID     = '0000ff00-0000-1000-8000-00805f9b34fb';
 const NOTIFY_UUID  = '0000ff01-0000-1000-8000-00805f9b34fb';
 const CTRL_UUID    = '0000ff02-0000-1000-8000-00805f9b34fb';
 
-const P_COLORS   = ['','#40a0ff','#00e050','#ff3030','#ffe000','#b060ff','#ff8800','#ff40c0','#00d0d0','#40ffb0','#ff6040'];
-const P_TEXT     = ['','#000',   '#000',   '#fff',   '#000',   '#fff',   '#000',   '#000',   '#000',   '#000',   '#fff'  ];
+// Team-Farben: Standard (Index 0 ungenutzt, 1–20). Laufzeit-Werte in P_COLORS,
+// per Einstellungen überschreibbar (localStorage 'buzzquiz_teamcolors').
+const DEFAULT_P_COLORS = ['',
+  '#40a0ff','#00e050','#ff3030','#ffe000','#b060ff',
+  '#ff8800','#ff40c0','#00d0d0','#40ffb0','#ff6040',
+  '#7080ff','#a0d000','#ff70a0','#00b0e0','#d0a030',
+  '#60c080','#c060a0','#ffb060','#50d0c0','#9090e0'];
+let P_COLORS = DEFAULT_P_COLORS.slice();   // wird in applyTeamColors() befüllt
+let P_TEXT   = [];                          // wird aus P_COLORS abgeleitet
 const TEAM_NAMES = ['','Team Blau','Team Grün','Team Rot','Team Gelb','Team Lila','Team Orange','Team Pink','Team Cyan','Team Mint','Team Koralle'];
 // Spieler-Namen – werden via BLE-Notification aktualisiert wenn Handys ihren Namen senden.
 // Startet als Kopie der TEAM_NAMES (Standard-Fallback).
@@ -1768,6 +1794,68 @@ function renderDevBuzzers() {
 }
 
 // ══════════════════════════════════════════════
+//  TEAM-FARBEN (individuell einstellbar)
+// ══════════════════════════════════════════════
+// Lesbare Textfarbe (schwarz/weiß) nach wahrgenommener Helligkeit.
+function textColorFor(hex) {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(String(hex).trim());
+  if (!m) return '#000';
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  return lum > 150 ? '#000' : '#fff';
+}
+
+// Befüllt P_COLORS aus Defaults + gespeicherten Overrides und leitet P_TEXT ab.
+function applyTeamColors() {
+  P_COLORS = DEFAULT_P_COLORS.slice();
+  try {
+    const saved = JSON.parse(localStorage.getItem('buzzquiz_teamcolors') || '[]');
+    if (Array.isArray(saved)) {
+      for (let i = 1; i <= 20; i++) {
+        if (typeof saved[i] === 'string' && /^#[0-9a-fA-F]{6}$/.test(saved[i])) {
+          P_COLORS[i] = saved[i];
+        }
+      }
+    }
+  } catch (e) { /* ungültig → nur Defaults */ }
+  P_TEXT = P_COLORS.map((c, i) => i === 0 ? '' : textColorFor(c));
+}
+
+// Rendert pro aktivem Team eine Zeile mit Name + Farbwähler.
+function renderColorSettings() {
+  const grid = document.getElementById('color-settings-grid');
+  if (!grid) return;
+  const n = gameMode === 'hardware' ? 4 : gameNumPlayers;
+  let html = '';
+  for (let i = 1; i <= n; i++) {
+    html += `<div class="color-row">
+      <span class="color-name">${esc(pname(i))}</span>
+      <input type="color" value="${P_COLORS[i]}" onchange="setTeamColor(${i}, this.value)">
+    </div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function setTeamColor(slot, hex) {
+  if (slot < 1 || slot > 20) return;
+  P_COLORS[slot] = hex;
+  P_TEXT[slot]   = textColorFor(hex);
+  localStorage.setItem('buzzquiz_teamcolors', JSON.stringify(P_COLORS));
+  renderPlayerGrid();   // ruft intern renderDevBuzzers() + renderColorSettings()
+  renderScoreboard();
+  renderPhoneQR();
+}
+
+function resetTeamColors() {
+  localStorage.removeItem('buzzquiz_teamcolors');
+  applyTeamColors();
+  renderPlayerGrid();   // ruft intern renderDevBuzzers() + renderColorSettings()
+  renderScoreboard();
+  renderPhoneQR();
+}
+
+// ══════════════════════════════════════════════
 //  SPIELLOGIK
 // ══════════════════════════════════════════════
 async function startRound() {
@@ -2073,6 +2161,7 @@ function renderPlayerGrid() {
   grid.style.gridTemplateColumns = 'repeat(2, 1fr)';
   grid.innerHTML = html;
   renderDevBuzzers();   // Dev-Buzzer-Beschriftungen/Anzahl aktuell halten
+  renderColorSettings();   // Farb-Einstellungszeilen aktuell halten
 }
 
 function resetBadges() {
@@ -2383,11 +2472,13 @@ function updateSpotifyUI(loggedIn) {
 
 // Beim Laden: gespeicherten Modus wiederherstellen
 window.addEventListener('DOMContentLoaded', () => {
+  applyTeamColors();      // Team-Farben laden BEVOR das erste Rendering läuft
   switchMode(gameMode);   // initialisiert Player-Grid, QR-Codes und Dev-Buzzer
   switchModeratorMode(moderatorMode);
   initGuessThreshold();
   initWheelSettings();
   initDevMode();
+  renderColorSettings();
 });
 
 // ══════════════════════════════════════════════
@@ -2443,6 +2534,7 @@ function onPlayerCountChange() {
   renderPhoneQR();
   renderScoreboard();
   renderDevBuzzers();
+  renderColorSettings();
 }
 
 // ══════════════════════════════════════════════
