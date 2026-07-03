@@ -878,7 +878,9 @@ function renderQaGame() {
   document.getElementById('qa-reveal-btn').textContent = 'Antwort zeigen';
   document.getElementById('qa-prev-btn').disabled = qaIndex <= 0;
   document.getElementById('qa-next-btn').disabled = qaIndex >= total - 1;
-  if (q) bleSendQaQuestion(q.q);
+  // Ans Basis-Display geht die ANTWORT – der Moderator sieht sie dort und
+  // kann richtig/falsch werten (die Spieler sehen nur den Moderator-Screen).
+  if (q) bleSendQaAnswer(q.a);
 }
 
 function qaToggleAnswer() {
@@ -892,7 +894,7 @@ function qaToggleAnswer() {
 function qaNext() { if (qaIndex < qaQuestions.length - 1) { qaIndex++; renderQaGame(); } }
 function qaPrev() { if (qaIndex > 0) { qaIndex--; renderQaGame(); } }
 
-async function bleSendQaQuestion(text) {
+async function bleSendQaAnswer(text) {
   if (!ctrlChr || !text) return;
   const enc = new TextEncoder().encode(text.substring(0, 120));
   const payload = new Uint8Array(1 + enc.length);
