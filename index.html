@@ -441,6 +441,9 @@
                             font-size: 1.05rem; border-radius: 14px; }
     .score-wrong { color: var(--red); font-size: .78rem; font-weight: 800;
                    margin-left: 8px; white-space: nowrap; }
+    .wheel-progress { display: inline-flex; gap: 3px; margin-left: 8px; vertical-align: middle; }
+    .wheel-seg  { width: 11px; height: 11px; border-radius: 3px; background: var(--border); }
+    .wheel-seg.filled { background: var(--red); }
 
     /* ── Dev-Buzzer (Developer-Modus) ── */
     #dev-buzzer-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 6px; }
@@ -859,6 +862,7 @@ let wheelMode      = localStorage.getItem('buzzquiz_wheelmode') === '1';
 let wrongCounts    = new Array(21).fill(0); // Falsch-Zähler pro Team-Slot, 1–20
 let wheelRotation  = 0;   // kumulative Rad-Rotation in Grad
 let wheelSegments  = [];  // aktuelle Segment-Optionen des Rads
+let wheelBaseSpun  = false;  // true nach dem 1. Dreh (Basis-KEY: 1× drehen, dann schließen)
 const WHEEL_COLORS = ['#ffe000','#00e050','#40a0ff','#ff3030','#ff9f1c','#b15cff','#2ec4b6','#ff5d8f'];
 let gameNumPlayers = 4;               // aktive Spieleranzahl
 let gameMode = localStorage.getItem('gameMode') || 'hardware';
@@ -1401,6 +1405,9 @@ function bleDisconnect() {
 }
 
 function onBleDisconnect() {
+  // Hinweis: Fällt BLE bei offenem Glücksrad aus, bleibt der Rad-Modus auf der
+  // Basis evtl. gesetzt (0x09-AUS kann nicht mehr gesendet werden). Das ist
+  // unkritisch – es korrigiert sich beim nächsten openWheel/closeWheel selbst.
   ctrlChr = null;
   setBleDot('err', 'Getrennt');
   document.getElementById('btn-ble-on').disabled  = false;
@@ -1470,6 +1477,10 @@ async function onBleNotify(e) {
     log(`✗ Falsch (Basis-Button) Spieler ${msg.player}`, 'y');
     if (msg.player) currentBuzzPlayer = msg.player;
     await onFalsch(false);   // false = kein BLE 'L' zurücksenden (vermeide Loop)
+  } else if (msg.type === 'hwwheel') {
+    // Basis-KEY im Rad-Modus: 1. Druck dreht, danach schließt
+    if (!wheelBaseSpun) { log('🎡 Drehen (Basis-KEY)', 'g'); spinWheel(); }
+    else { log('🎡 Rad schließen (Basis-KEY)', 'g'); closeWheel(); }
   } else if (msg.type === 'phone') {
     // Handy-Buzzer: Online-/Offline-Status
     if (msg.player >= 1 && msg.player <= 10) {
@@ -1713,6 +1724,14 @@ function buildWheel() {
   return segments;
 }
 
+// Rad-Modus an die Basis melden (BLE 0x09): 1 = Rad offen, 0 = zu.
+// Solange an, liefert die KEY-Taste der Basis 'hwwheel' statt Auflösung/Falsch.
+function bleSetWheelMode(on) {
+  if (!ctrlChr) return;
+  try { ctrlChr.writeValueWithoutResponse(new Uint8Array([0x09, on ? 1 : 0])); }
+  catch (e) { log('BLE Rad-Modus senden fehlgeschlagen: ' + e.message, 'y'); }
+}
+
 function openWheel(player) {
   const ov    = document.getElementById('wheel-overlay');
   const title = document.getElementById('wheel-title');
@@ -1722,6 +1741,8 @@ function openWheel(player) {
   document.getElementById('wheel-result').textContent = '';
   document.getElementById('wheel-spin-btn').disabled = false;
   ov.classList.add('show');
+  wheelBaseSpun = false;      // Basis-KEY: nächster Druck dreht
+  bleSetWheelMode(true);      // Basis: KEY steuert jetzt das Rad
   // Rad erst nach dem Sichtbarwerden bauen, damit clientWidth verfügbar ist
   // (doppeltes rAF: erst nach Layout-Flush hat die Disc ihre echte Breite)
   requestAnimationFrame(() => requestAnimationFrame(() => { wheelSegments = buildWheel(); }));
@@ -1729,6 +1750,7 @@ function openWheel(player) {
 
 function spinWheel() {
   if (!wheelSegments.length) return;
+  wheelBaseSpun = true;   // ein Dreh hat stattgefunden → Basis-KEY schließt jetzt
   const spinBtn = document.getElementById('wheel-spin-btn');
   const disc    = document.getElementById('wheel-disc');
   spinBtn.disabled = true;
@@ -1755,6 +1777,7 @@ function spinWheel() {
 
 function closeWheel(resume = true) {
   document.getElementById('wheel-overlay').classList.remove('show');
+  bleSetWheelMode(false);   // Basis: Tasten wieder normal
   // Song lief während des Rads pausiert weiter – erst beim Schließen fortsetzen.
   // resume=false beim kompletten Spiel-Reset (kein ungewolltes Auto-Play).
   if (resume) resumeSpotify();
@@ -1948,6 +1971,12 @@ function resetRound() {
 }
 
 async function handleBuzz(player, round) {
+  // Während das Glücksrad offen ist, eingehende Buzzes ignorieren – sonst liefe ein
+  // Buzz-Overlay unsichtbar hinter dem Rad und würde den Spielzustand verstellen.
+  if (document.getElementById('wheel-overlay').classList.contains('show')) {
+    log(`Buzz von ${pname(player)} ignoriert – Glücksrad läuft`, 'y');
+    return;
+  }
   // currentRound wird von der Web-UI selbst gezählt – Basis-Wert ignorieren
   currentBuzzPlayer = player;
 
@@ -2233,13 +2262,24 @@ function renderScoreboard() {
     if (i === 0 || p.score !== players[i-1].score) rank = i;
     const medal = p.score > 0 ? (MEDALS[rank] ?? `${rank+1}.`) : `${i+1}.`;
     const pct   = Math.round((p.score / maxScore) * 100);
-    // Falsch-Zähler nur im Glücksrad-Modus; pro Slot einmal (Einzel: si=-1, Gruppe: erster Sub si=0)
-    const showWrong = wheelMode && p.si <= 0 && wrongCounts[p.id] > 0;
-    const wrongTag  = showWrong ? `<span class="score-wrong">✗ ${wrongCounts[p.id]}</span>` : '';
+    // Glücksrad-Modus: Fortschritt zum Rad als Segmente (aktueller Zyklus) + Gesamtzahl "✗ N".
+    // Pro Slot einmal (Einzel: si=-1, Gruppe: erster Sub si=0).
+    let wheelTag = '';
+    if (wheelMode && p.si <= 0) {
+      const thr    = getWheelThreshold();
+      const total  = wrongCounts[p.id];
+      const filled = total % thr;
+      let segs = '';
+      for (let s = 0; s < thr; s++) {
+        segs += `<span class="wheel-seg${s < filled ? ' filled' : ''}"></span>`;
+      }
+      const num = total > 0 ? `<span class="score-wrong">✗ ${total}</span>` : '';
+      wheelTag = `<span class="wheel-progress" title="${filled}/${thr} bis zum Glücksrad">${segs}</span>${num}`;
+    }
     return `<div class="score-row" style="--pc:${p.color}">
       <div class="score-medal">${medal}</div>
       <div class="score-player">
-        <div class="score-name">${esc(p.name)}${wrongTag}</div>
+        <div class="score-name">${esc(p.name)}${wheelTag}</div>
         <div class="score-bar-wrap">
           <div class="score-bar" style="width:${pct}%"></div>
         </div>
